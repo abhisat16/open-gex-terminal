@@ -117,7 +117,13 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
 #levels h2{margin:0 0 4px;font-size:17px;font-weight:600}
 #levels .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
 .lvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:16px}
-.tvc{height:330px;margin:4px 0 8px;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.tvc{height:330px;margin:0 0 8px;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.tvtabs{display:flex;gap:4px;margin-top:4px}
+.tvtabs button{background:none;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;padding:4px 10px;font-size:11px;color:var(--muted)}
+.tvtabs button.on{color:var(--text);background:var(--panel2)}
+.tvc{position:relative}
+.tvlive{height:420px!important}
+.tvnote{position:absolute;left:10px;top:8px;right:80px;z-index:3;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;line-height:1.4}
 .tvbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .tvbar .open{margin-top:0;text-decoration:none;color:var(--text);display:inline-block}
 .lvc{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel)}
@@ -1362,7 +1368,9 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
       const lv = levelSet(s, c), candles = candlesFor(s, null, null), cday = candles.length ? GM.etDay(candles[candles.length - 1].t) : null;
       const tv = TV_SYM[lab] || TV_SYM[s];
       h += `<div class="lvc"><h4>${tickerLabel(s)} <span>${lab} ${fmt(conv(c.spot), 2)}</span></h4><div class="meta">${etDate(c.asOf)} ${etTime(c.asOf)} ET · ${f ? (f.useRatio ? `×${f.ratio.toFixed(4)}` : `basis ${f.basis >= 0 ? '+' : ''}${f.basis.toFixed(2)}`) + ` (${f.src})` : 'no futures price in file'}${cday ? ` · candles ${cday.slice(5).replace('-', '/')}${cday !== GM.prep(c).day ? ' (previous session)' : ''}` : ' · no candles in file (spot points only)'}</div>
-        <div class="tvc" id="tvc${n}"></div>
+        <div class="tvtabs"><button class="on" data-tvt="lv" data-n="${n}">Levels chart</button>${tv ? `<button data-tvt="live" data-n="${n}" data-sym="${tv}">Live TradingView</button>` : ''}</div>
+        <div class="tvc" id="tvc${n}"></div>${candles.length ? '' : `<div class="meta c-or" style="margin:-4px 0 8px">No candles in this file yet, so the chart shows the levels around spot. Newer files (and the live link) include Cboe candles. The Live TradingView tab shows the real chart now.</div>`}
+        <div class="tvc tvlive" id="tvl${n}" style="display:none"></div>
         <div class="tvbar"><button class="open" data-pine="${s}">Copy TradingView script</button>${tv ? `<a class="open" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tv)}" target="_blank" rel="noopener">Open ${tv.split(':')[1]} on TradingView ↗</a>` : ''}<button class="open" data-open="${s}">open in classic →</button></div>
         <table><tr><th></th><th>call wall</th><th>put wall</th><th>zero γ</th><th>net gex</th></tr>
         ${rows.map(([nm, r]) => `<tr><td>${nm}${nm !== '90d' ? `<small>${mmdd(r.exps[nm === 'latest' ? 0 : 1])}</small>` : '<small>OI</small>'}</td><td class="c-gr">${cell(r.oi.pos)}</td><td class="c-rd">${cell(r.oi.neg)}</td><td class="c-or">${cell(r.oi.zero)}</td><td class="${r.netOI < 0 ? 'c-rd' : 'c-gr'}">${fmt(r.netOI / 1e9, 2)}Bn</td></tr>`).join('')}
@@ -1383,16 +1391,34 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
         series = ch.addCandlestickSeries({ upColor: '#58c95a', downColor: '#a05ad8', borderVisible: false, wickUpColor: '#58c95a', wickDownColor: '#a05ad8', priceFormat: { type: 'price', precision: 2, minMove: 0.01 } });
         series.setData(jb.candles.map(k => ({ time: Math.floor(k.t / 1000), open: conv(k.o), high: conv(k.h), low: conv(k.l), close: conv(k.c) })));
       } else {
-        series = ch.addLineSeries({ color: '#58c95a', lineWidth: 2, pointMarkersVisible: true });
-        const seen = new Set(); series.setData(jb.spots.map(p => ({ time: Math.floor(p.t / 1000), value: conv(p.v) })).filter(p => !seen.has(p.time) && seen.add(p.time)));
+        series = ch.addLineSeries({ color: '#58c95a', lineWidth: 2, pointMarkersVisible: true, lastValueVisible: true });
+        const day = GM.prep(jb.c).day, pts = new Map();
+        for (let m = 4 * 60; m <= 16 * 60; m += 5) { const t = Math.floor(etClockMs(day, Math.floor(m / 60), m % 60) / 1000); pts.set(t, { time: t }); }
+        for (const p of jb.spots) { if (GM.etDay(p.t) !== day) continue; const t = Math.floor(p.t / 1000); pts.set(t, { time: t, value: conv(p.v) }); }
+        series.setData([...pts.values()].sort((a, b) => a.time - b.time));
       }
       for (const l of jb.lv) series.createPriceLine({ price: conv(l.v), color: l.color, lineWidth: l.w, lineStyle: l.style, axisLabelVisible: true, title: l.title });
       // keep the levels in view: autoscale includes them
-      series.applyOptions({ autoscaleInfoProvider: orig => { const r = orig(); const ps = jb.lv.filter(l => !l.title.includes('σ')).map(l => conv(l.v)); if (!r) return r; const nearPs = ps.filter(p => Math.abs(p / r.priceRange.maxValue - 1) < 0.03 || Math.abs(p / r.priceRange.minValue - 1) < 0.03); return { priceRange: { minValue: Math.min(r.priceRange.minValue, ...nearPs), maxValue: Math.max(r.priceRange.maxValue, ...nearPs) } }; } });
+      const spotF = conv(jb.c.spot), band = jb.s === 'GLD' ? 0.1 : 0.06;
+      const ps = jb.lv.map(l => conv(l.v)).filter(p => Math.abs(p / spotF - 1) <= band).concat([spotF]);
+      series.applyOptions({ autoscaleInfoProvider: orig => { const r = orig(); const lo = Math.min(...ps, r ? r.priceRange.minValue : Infinity), hi = Math.max(...ps, r ? r.priceRange.maxValue : -Infinity), pad = (hi - lo) * 0.06 || spotF * 0.002; return { priceRange: { minValue: lo - pad, maxValue: hi + pad } }; } });
       ch.timeScale().fitContent();
     }
     st.sym = saveSym; st.idx = saveIdx;
     el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { st.sym = b.dataset.open; st.idx = st.store[st.sym].length - 1; selectView('classic'); }));
+    el.querySelectorAll('[data-tvt]').forEach(b => b.addEventListener('click', () => {
+      const n = b.dataset.n, live = b.dataset.tvt === 'live';
+      b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      $('tvc' + n).style.display = live ? 'none' : ''; const box = $('tvl' + n); box.style.display = live ? '' : 'none';
+      if (live && !box.dataset.loaded) {
+        box.dataset.loaded = '1';
+        const dark = !document.documentElement.classList.contains('light');
+        const cfg = { autosize: true, symbol: b.dataset.sym, interval: '5', timezone: 'America/New_York', theme: dark ? 'dark' : 'light', style: '1', locale: 'en', hide_side_toolbar: false, allow_symbol_change: true, support_host: 'https://www.tradingview.com' };
+        box.innerHTML = '<div class="tradingview-widget-container" style="height:100%;width:100%"><div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div></div>';
+        const sc = document.createElement('script'); sc.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'; sc.async = true; sc.text = JSON.stringify(cfg);
+        box.firstChild.appendChild(sc);
+      }
+    }));
     el.querySelectorAll('[data-pine]').forEach(b => b.addEventListener('click', async () => {
       const s = b.dataset.pine, keep = [st.sym, st.idx]; st.sym = s; st.idx = s === saveSym ? saveIdx : st.store[s].length - 1;
       const c = st.store[s][st.idx], code = pineScript(s, c, levelSet(s, c), futInfo(s)); st.sym = keep[0]; st.idx = keep[1];
