@@ -3,258 +3,189 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open GEX Terminal — GexBot-Classic-style levels from Cboe data</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Open GEX Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f6f7f9;--panel:#ffffff;--panel2:#f9fafb;--line:#e5e7eb;--line2:#d1d5db;--txt:#111827;--txt2:#374151;--mut:#6b7280;--pos:#16a34a;--neg:#dc2626;--acc:#2563eb;--accSoft:#eff6ff;--warn:#b45309;--zero:#d97706;--shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);--sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
-[data-theme="dark"]{--bg:#0b0f14;--panel:#121821;--panel2:#0f141b;--line:#1f2733;--line2:#2b3644;--txt:#e5e7eb;--txt2:#cbd5e1;--mut:#8b95a5;--pos:#22c55e;--neg:#ef4444;--acc:#60a5fa;--accSoft:#0f2238;--warn:#f59e0b;--zero:#f59e0b;--shadow:none}
+:root{
+  --bg:#000;--panel:#0b0b0d;--panel2:#141418;--line:#26262c;--line2:#1b1b20;--text:#e8e8ec;--muted:#8b8b96;--dim:#5c5c66;
+  --grid:#141417;--axis:#c9c9d1;--green:#5fd35f;--red:#e5383b;--orange:#f0a030;--cyan:#2fe0e6;--purple:#b04fd8;--callc:#f39c32;--putc:#a65be8;
+  --blue:#7ab8f5;--btn:#17171c;--btnOn:#2c2c36;--spotbg:#ffffff;--spotfg:#000;--candleUp:#58c95a;--candleDn:#a05ad8;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;--sans:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+:root.light{
+  --bg:#fbfbfc;--panel:#ffffff;--panel2:#f3f4f6;--line:#dfe1e6;--line2:#eceef1;--text:#15161a;--muted:#626673;--dim:#9a9ea9;
+  --grid:#eff0f3;--axis:#2b2d33;--green:#1f9d3a;--red:#d62f33;--orange:#d9820f;--cyan:#0aa7b0;--purple:#8a3fc0;--callc:#e07f10;--putc:#8746d6;
+  --blue:#2f7fd8;--btn:#f3f4f6;--btnOn:#e3e6eb;--spotbg:#15161a;--spotfg:#fff;--candleUp:#1f9d3a;--candleDn:#8a3fc0;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
-header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
-.brand{display:flex;align-items:center;gap:10px}
-.logo{width:30px;height:30px;border-radius:8px;background:var(--acc);color:#fff;display:grid;place-items:center;font:600 13px var(--sans);letter-spacing:-.3px}
-header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.2px}
-header .sub{color:var(--mut);font-size:12px}
-header .stamp{margin-left:auto;font:12px/1.4 var(--mono);color:var(--mut);text-align:right}
-main{padding:20px 24px 40px;max-width:1520px;margin:0 auto}
-.grid{display:grid;gap:16px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
-.panel h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 12px;font-weight:600}
-#load{grid-template-columns:1.25fr 1fr}
-#drop{border:1.5px dashed var(--line2);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:.15s;background:var(--panel2)}
-#drop.hover,#drop:hover{border-color:var(--acc);background:var(--accSoft)}
-#drop b{color:var(--acc);font-weight:600}
-ol{margin:6px 0 0 18px;padding:0;color:var(--txt2)} ol li{margin:4px 0}
-a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
-button,select,input{font:inherit;font-size:13px;color:var(--txt);background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:7px 12px;transition:border-color .15s,background .15s}
-button{cursor:pointer;font-weight:500} button:hover{border-color:var(--acc)}
-button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
-button.primary:hover{filter:brightness(1.05)}
-input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--accSoft)}
-.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:end}
-.controls label{display:flex;flex-direction:column;font-size:11px;color:var(--mut);gap:5px;font-weight:500;letter-spacing:.02em}
-.controls input[type=number]{width:110px;font-family:var(--mono)}
-.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:var(--panel2);padding:2px;gap:2px}
-.seg button{border:0;border-radius:6px;background:transparent;padding:5px 12px;color:var(--txt2)}
-.seg button.on{background:var(--panel);color:var(--txt);box-shadow:var(--shadow);outline:1px solid var(--line)}
-[data-theme="dark"] .seg button.on{background:var(--accSoft);color:#fff;outline:1px solid var(--line2)}
-#cards{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
-.card .k{font-size:11px;color:var(--mut);font-weight:500;letter-spacing:.02em}
-.card .v{font:500 20px/1.3 var(--mono);margin-top:4px;letter-spacing:-.3px}
-.card .s{font:11.5px var(--mono);color:var(--mut);margin-top:2px}
-.pos{color:var(--pos)} .neg{color:var(--neg)} .zero{color:var(--zero)} .warn{color:var(--warn)}
-.two{grid-template-columns:1fr 1fr}
-.chart{height:560px}
-.chart.short{height:420px}
-table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
-th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}
-th:first-child,td:first-child{text-align:left;font-family:var(--sans)}
-th{color:var(--mut);font:500 11px var(--sans);letter-spacing:.03em}
-tbody tr:hover{background:var(--panel2)}
-.muted{color:var(--mut)} .small{font-size:12px}
-#empty{padding:48px;text-align:center;color:var(--mut)}
-.hidden{display:none!important}
-details{border-top:1px solid var(--line);padding:10px 0} details:first-of-type{border-top:0}
-details summary{cursor:pointer;color:var(--txt);font-weight:500}
-.explain p{margin:8px 0;color:var(--txt2);max-width:980px} .explain code{background:var(--panel2);border:1px solid var(--line);padding:1px 5px;border-radius:5px;font:12px var(--mono)}
-#msg{min-height:18px;font-size:12.5px}
-textarea{width:100%;height:70px;background:var(--panel2);color:var(--txt);border:1px solid var(--line2);border-radius:8px;font:12px var(--mono);padding:8px}
-.tabs{display:inline-flex;margin-left:20px;border:1px solid var(--line2);border-radius:9px;overflow:hidden;background:var(--panel2);padding:2px;gap:2px}
-.tabs button{border:0;border-radius:7px;background:transparent;padding:6px 16px;color:var(--txt2)}
-.tabs button.on{background:var(--panel);color:var(--txt);box-shadow:var(--shadow);outline:1px solid var(--line)}
-[data-theme="dark"] .tabs button.on{background:var(--accSoft);color:#fff}
-#themeBtn{margin-left:12px}
-#classic{grid-template-columns:1fr 300px;align-items:start}
-#mainChart{height:720px}
-.side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13px;box-shadow:var(--shadow)}
-.side h3{font-size:13px;margin:0 0 10px;font-weight:600;letter-spacing:.02em}
-.side .sec{border-top:1px solid var(--line);padding:10px 0 8px}
-.side .sec b{display:block;font-size:11px;margin-bottom:6px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
-.side .row{display:flex;justify-content:space-between;font:12.5px var(--mono);padding:2px 0}
-.side .row span:first-child{font-family:var(--sans);color:var(--txt2)}
-.side .row span.pos:first-child{color:var(--pos)} .side .row span.neg:first-child{color:var(--neg)} .side .row span.zero:first-child{color:var(--zero)}
-.side .seg{width:100%;margin-bottom:8px}.side .seg button{flex:1}
-.side .stack button{display:block;width:100%;margin:5px 0;text-align:center}
-.side .stack button.on{background:var(--accSoft);color:var(--acc);border-color:var(--acc)}
-.mc td,.mc th{padding:3px 4px;font-size:11.5px}
-.play{display:flex;align-items:center;gap:8px;margin-top:8px}
-.play input[type=range]{flex:1;accent-color:var(--acc)}
-input[type=range]{accent-color:var(--acc);padding:0;border:0}
-footer{max-width:1520px;margin:0 auto;padding:0 24px 32px;color:var(--mut);font-size:12px}
-.lvhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
-.lvhead h3{margin:0 0 2px;font-size:16px;font-weight:600}
-.lvt td,.lvt th{text-align:right;vertical-align:top}
-.lvt td:first-child,.lvt th:first-child{text-align:left}
-.lvt td b{font-weight:600}
-#levelsBody{grid-template-columns:repeat(auto-fit,minmax(520px,1fr))}
-@media (max-width:1100px){#classic{grid-template-columns:1fr}}
-@media (max-width:1000px){#load,.two{grid-template-columns:1fr} header{flex-wrap:wrap}}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:var(--mono)}
+/* top bar */
+#top{height:46px;display:flex;align-items:center;gap:22px;padding:0 18px;border-bottom:1px solid var(--line2)}
+#logo{display:flex;align-items:center;gap:7px;font-weight:700;font-size:17px;letter-spacing:-.2px;user-select:none}
+#logo .bars{display:flex;flex-direction:column;gap:2.5px;align-items:flex-end}
+#logo .bars i{display:block;height:2px;background:var(--text);border-radius:1px}
+#nav{display:flex;gap:18px}
+#nav a{color:var(--muted);text-decoration:none;cursor:pointer;font-size:13px;padding:4px 0}
+#nav a.on{color:var(--blue)}
+#nav a:hover{color:var(--text)}
+#nav .sep{color:var(--dim)}
+#topr{margin-left:auto;display:flex;gap:16px;align-items:center}
+#topr a{color:var(--muted);cursor:pointer;font-size:13px;text-decoration:none}
+#topr a:hover{color:var(--text)}
+#liveDot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:5px;vertical-align:1px}
+#liveDot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+#themeBtn{background:none;border:0;padding:2px;display:flex}
+/* layout */
+#main{display:flex;height:calc(100% - 46px)}
+#chartWrap{flex:1;position:relative;min-width:0}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+#tools{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:12px;align-items:center;z-index:2}
+#tools button{background:none;border:0;color:var(--axis);padding:2px;opacity:.85;display:flex}
+#tools button:hover{opacity:1}
+#ivSel{background:none;border:0;color:var(--muted);font-size:10px;font-family:var(--mono);cursor:pointer}
+#wm{position:absolute;right:64px;top:12px;text-align:right;color:var(--dim);opacity:.5;font-weight:300;font-size:30px;line-height:.85;pointer-events:none;user-select:none;letter-spacing:-.5px}
+#wm small{display:block;font-size:9px;font-family:var(--mono);letter-spacing:0;margin-top:3px}
+#empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:var(--muted);text-align:center;padding:20px}
+#empty h2{margin:0;color:var(--text);font-weight:600;font-size:18px}
+#empty .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.pill{background:var(--btn);border:1px solid var(--line);border-radius:8px;padding:8px 14px;color:var(--text)}
+.pill:hover{background:var(--btnOn)}
+.pill.blue{background:#8ec0f5;color:#08121f;border-color:#8ec0f5}
+#tip{position:absolute;pointer-events:none;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:var(--mono);font-size:11px;display:none;z-index:3;white-space:nowrap}
+#drop{position:absolute;inset:0;border:2px dashed var(--blue);background:rgba(80,140,220,.08);display:none;align-items:center;justify-content:center;font-size:16px;z-index:5}
+/* sidebar */
+#side{width:236px;flex:none;border-left:1px solid var(--line2);background:var(--panel);overflow-y:auto;padding:10px 12px 16px}
+#side::-webkit-scrollbar{width:6px}#side::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.shead{display:flex;align-items:center;justify-content:space-between;margin:4px 0 12px}
+.shead h3{margin:0;font-size:16px;font-weight:500}
+.shead .ic{display:flex;gap:12px;align-items:center}
+.shead .ic button{background:none;border:0;padding:0;display:flex}
+.fld{position:relative;border:1px solid var(--line);border-radius:6px;margin-bottom:10px}
+.fld label{position:absolute;top:-7px;left:8px;background:var(--panel);font-size:9.5px;color:var(--muted);padding:0 3px}
+.fld select{width:100%;background:none;border:0;color:var(--text);padding:9px 9px 8px;font-size:13px;appearance:none;-webkit-appearance:none;cursor:pointer;font-family:var(--sans)}
+.fld select option{background:var(--panel)}
+.fld:after{content:'';position:absolute;right:12px;top:15px;border:5px solid transparent;border-top-color:var(--text);pointer-events:none}
+.futtog{display:flex;font-size:11px;margin:-4px 0 10px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.futtog button{flex:1;background:none;border:0;padding:5px 0;color:var(--muted)}
+.futtog button.on{background:var(--btnOn);color:var(--text)}
+.futin{display:flex;gap:6px;align-items:center;margin:-4px 0 10px;font-size:11px;color:var(--muted)}
+.futin input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:4px 6px;font-family:var(--mono);font-size:11px}
+.seg{border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:12px}
+.seg button{display:block;width:100%;background:var(--panel);border:0;border-bottom:1px solid var(--line);padding:8px 0;font-size:12px;color:var(--text)}
+.seg button:last-child{border-bottom:0}
+.seg button.on{background:var(--btnOn)}
+.seg button:hover{background:var(--panel2)}
+.sec{font-size:12px;font-weight:600;margin:10px 0 3px;padding-bottom:3px;border-bottom:1px solid var(--line)}
+.sec.g{color:var(--green)}.sec.o{color:var(--orange)}
+.kv{display:flex;justify-content:space-between;font-size:11.5px;line-height:1.55}
+.kv span:first-child{color:var(--text);padding-left:6px}
+.kv span:last-child{font-family:var(--mono);font-size:11px}
+.c-or{color:var(--orange)!important}.c-gr{color:var(--green)!important}.c-rd{color:var(--red)!important}.c-cy{color:var(--cyan)!important}.c-pu{color:var(--purple)!important}.c-mu{color:var(--muted)!important}
+.c-w1{color:#e8e8ec!important}.c-w5{color:#46c6e0!important}.c-w10{color:#5a9cf0!important}.c-w15{color:#5560d8!important}.c-w30{color:#4a3fb0!important}
+:root.light .c-w1{color:#555!important}
+.opgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.opgrid .seg{margin:0}
+.opgrid .seg button{padding:11px 0}
+.tg{display:flex;flex-direction:column;gap:7px;justify-content:center;padding-left:4px}
+.tg label{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;user-select:none}
+.tg input{display:none}
+.tg i{width:26px;height:14px;border-radius:7px;background:var(--line);position:relative;transition:.15s;flex:none}
+.tg i:after{content:'';position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#ddd;transition:.15s}
+.tg input:checked+i{background:var(--cyan)}
+.tg input:checked+i:after{left:14px;background:#fff}
+.lrow{display:flex;gap:6px;margin:14px 0 8px}
+.chip{border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--muted);background:var(--panel2)}
+.chip.date{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text);background:var(--btn);border-radius:16px}
+select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:pointer;font-family:var(--sans)}
+.clr{width:100%;background:#8ec0f5;color:#0a1526;border:0;border-radius:4px;padding:7px 0;font-size:12px;display:flex;justify-content:center;gap:6px;align-items:center}
+.clr:hover{filter:brightness(1.05)}
+.play{margin-top:16px}
+.play .r1{display:flex;align-items:center;gap:10px;font-size:11.5px}
+.play .r1 .sp{color:var(--muted);cursor:pointer}
+.play .r1 .t{flex:1;text-align:center;font-family:var(--mono)}
+.play .r1 button{background:none;border:0;color:var(--muted);font-size:15px;padding:0}
+.play input[type=range]{width:100%;margin:8px 0 6px;accent-color:var(--blue)}
+.play .r2{display:flex;justify-content:space-between}
+.play .r2 button{background:none;border:0;font-size:12px;padding:2px 4px;color:var(--text)}
+.note{font-size:10.5px;color:var(--muted);line-height:1.45;margin-top:12px}
+/* levels view */
+#levels{position:absolute;inset:0;overflow:auto;padding:22px 26px;display:none}
+#levels h2{margin:0 0 4px;font-size:17px;font-weight:600}
+#levels .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
+.lvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+.lvc{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel)}
+.lvc h4{margin:0 0 2px;font-size:15px;display:flex;justify-content:space-between;align-items:baseline}
+.lvc h4 span{font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:400}
+.lvc .meta{font-size:11px;color:var(--muted);margin-bottom:10px}
+.lvc table{width:100%;border-collapse:collapse;font-size:12px}
+.lvc th{text-align:right;color:var(--muted);font-weight:500;padding:4px 0;border-bottom:1px solid var(--line);font-size:11px}
+.lvc th:first-child,.lvc td:first-child{text-align:left}
+.lvc td{text-align:right;padding:5px 0;font-family:var(--mono);font-size:11.5px;border-bottom:1px solid var(--line2)}
+.lvc td:first-child{font-family:var(--sans)}
+.lvc td small{color:var(--muted);font-size:9.5px;display:block}
+.lvc .reg{margin-top:10px;font-size:12px}
+.lvc .open{margin-top:10px;background:none;border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:11.5px}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:20}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;max-width:620px;width:calc(100% - 30px);max-height:86vh;overflow:auto;padding:20px 22px;line-height:1.55}
+.modal h3{margin:0 0 10px;font-size:16px}
+.modal h4{margin:14px 0 4px;font-size:13px}
+.modal p,.modal li{font-size:12.5px;color:var(--text)}
+.modal .mu{color:var(--muted)}
+.modal code{font-family:var(--mono);font-size:11.5px;background:var(--panel2);padding:1px 4px;border-radius:3px}
+.modal .x{float:right;background:none;border:0;font-size:18px;color:var(--muted)}
+.bm{display:inline-block;background:#8ec0f5;color:#0a1526;padding:7px 14px;border-radius:6px;text-decoration:none;font-weight:600;margin:6px 0}
+.setrow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line2);font-size:12.5px}
+.setrow select,.setrow input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:12px;display:none;z-index:30;max-width:80vw}
+@media (max-width:820px){#side{width:200px}#nav{gap:12px}#topr .hide-s{display:none}}
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">
-    <div class="logo">γ</div>
-    <div><h1>Open GEX Terminal</h1>
-    <div class="sub">Dealer gamma levels from Cboe's free delayed option chains · SPX · NDX · GLD</div></div>
+<div id="top">
+  <div id="logo"><span class="bars"><i style="width:16px"></i><i style="width:11px"></i><i style="width:16px"></i><i style="width:8px"></i></span>gexterm</div>
+  <div id="nav">
+    <a data-v="classic" class="on">classic</a>
+    <a data-v="state">state</a>
+    <span class="sep">|</span>
+    <a data-v="levels">levels</a>
   </div>
-  <div class="tabs" id="tabs"><button data-v="levels">Levels</button><button data-v="classic" class="on">Classic</button><button data-v="analytics">Analytics</button></div>
-  <div class="seg hidden" id="symSeg" style="margin-left:10px"></div>
-  <div class="stamp" id="stamp">No data loaded</div>
-  <button id="themeBtn" title="Switch light / dark theme">Dark mode</button>
-</header>
-<main class="grid">
-
-<section id="load" class="grid">
-  <div class="panel">
-    <h2>1 · Load a chain</h2>
-    <div id="drop">
-      <div><b>Drop the Cboe CSV (or JSON) here</b> or click to choose a file · you can select several files at once (e.g. the SPX, NDX and GLD daily files)</div>
-      <div class="small muted" style="margin-top:6px">Everything is computed in your browser. Nothing is uploaded.</div>
-      <input id="file" type="file" multiple accept=".csv,.json,.txt" class="hidden">
+  <div id="topr">
+    <a id="liveBtn"><span id="liveDot"></span>live link</a>
+    <a id="filesBtn">load files</a>
+    <a id="demoBtn" class="hide-s">demo</a>
+    <a id="helpBtn">help</a>
+    <button id="themeBtn" title="light / dark"><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+  </div>
+</div>
+<div id="main">
+  <div id="chartWrap">
+    <canvas id="cv"></canvas>
+    <div id="wm">gex<br>term<small id="wmv">open</small></div>
+    <div id="tools">
+      <button id="fsBtn" title="full screen"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 5V1h4M10 1h4v4M14 10v4h-4M5 14H1v-4"/></svg></button>
+      <button id="snapBtn" title="save chart image"><svg width="16" height="15" viewBox="0 0 16 15" fill="currentColor"><path d="M5.5 1 4.3 2.8H2A1.5 1.5 0 0 0 .5 4.3v8.2A1.5 1.5 0 0 0 2 14h12a1.5 1.5 0 0 0 1.5-1.5V4.3A1.5 1.5 0 0 0 14 2.8h-2.3L10.5 1zM8 4.5a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6zm0 1.6a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"/></svg></button>
+      <select id="ivSel" title="candle interval"><option value="1">1m ▾</option><option value="5" selected>5m ▾</option><option value="15">15m ▾</option></select>
     </div>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <button id="goldBtn" class="primary" title="Applies gold settings to a GLD file you loaded and converts every level to gold futures (GC) prices">Gold mode (GLD → GC)</button>
-      <button id="demoBtn">Load synthetic demo session</button>
-      <button id="pasteToggle">Paste JSON/CSV instead</button>
+    <div id="tip"></div>
+    <div id="empty">
+      <h2>Drop your Cboe snapshot files here</h2>
+      <div>SPX, NDX and GLD files from the daily download (<span class="mono">SYM_YYYY-MM-DD_gex.csv</span>), Cboe CSV exports or Cboe JSON.<br>Select several at once. For intraday candles and max-change, use the <b>live link</b>.</div>
+      <div class="row"><button class="pill blue" id="emptyFiles">Load files</button><button class="pill" id="emptyLive">Set up live link</button><button class="pill" id="emptyDemo">Load demo session</button></div>
     </div>
-    <div id="pasteBox" class="hidden" style="margin-top:8px">
-      <textarea id="pasteTxt" placeholder="Paste the Cboe JSON or CSV text here"></textarea>
-      <button id="pasteGo" class="primary" style="margin-top:6px">Parse pasted data</button>
-    </div>
-    <div id="msg" class="muted" style="margin-top:8px"></div>
+    <div id="levels"></div>
+    <div id="drop">Drop files to load</div>
   </div>
-  <div class="panel">
-    <h2>How to get the data (free, 15-min delayed)</h2>
-    <ol>
-      <li>Open <a href="https://www.cboe.com/data/quotes/spx/options" target="_blank" rel="noopener">cboe.com → SPX → Options</a> (or SPY, QQQ, NDX, GLD…).</li>
-      <li>Set <b>Options Range: All</b> and <b>Expiration: All</b> (or a near-term subset for 0DTE work).</li>
-      <li>Click <b>Download CSV</b> at the bottom of the table and drop the file here.</li>
-      <li><b>Gold:</b> do the same on <a href="https://www.cboe.com/data/quotes/gld/options" target="_blank" rel="noopener">Cboe → GLD → Options</a>, type the GC price at that moment into "Futures price", then click <b>Gold mode</b>. Levels are converted by the ratio GC ÷ GLD.</li>
-    </ol>
-    <p class="small muted" style="margin-top:10px"><b>Daily snapshot files</b> (<code>SPX_YYYY-MM-DD_gex.csv</code> etc., saved by the scheduled download) already contain the matching futures price, so levels appear in ES / NQ / GC prices as soon as you drop one in.</p><p class="small muted"><b>For the intraday Classic chart:</b> download a fresh CSV every few minutes and add each one with "load snapshots" (or drop several at once). Each file becomes one point in time; the price line, level lines, max-change table and playback are built from them. Snapshots stay in this tab only; reloading the page clears them.</p><p class="small muted">Open interest is published once a day (overnight), so OI-based levels are fixed for the session. Volume-based levels change with every refresh. Re-download during the day to update Vol GEX.</p>
-  </div>
-</section>
-
-<section class="panel" id="ctrlPanel">
-  <h2>2 · Settings</h2>
-  <div class="controls">
-    <label>Expiry scope
-      <span class="seg" id="scopeSeg">
-        <button data-v="zero" title="Nearest expiry only (0DTE on expiry days)">Zero</button>
-        <button data-v="one" title="Next expiry after the nearest">One</button>
-        <button data-v="custom" title="All expiries up to N days">≤ N days</button>
-        <button data-v="full" class="on" title="All expiries up to 90 days (GexBot 'full')">Full (90d)</button>
-      </span>
-    </label>
-    <label>N days<input id="maxDays" type="number" value="30" min="1" step="1"></label>
-    <label>Strike range ±%<input id="rangePct" type="number" value="3" min="1" max="40" step="0.5"></label>
-    <label>Spot override<input id="spot" type="number" step="0.01" placeholder="from file"></label>
-    <label>Futures price (ES/NQ/GC)<input id="fut" type="number" step="0.25" placeholder="optional"></label>
-    <label>Rate r<input id="rate" type="number" value="0.04" step="0.0025"></label>
-    <label>Div yield q<input id="divq" type="number" value="0.012" step="0.001"></label>
-    <label>Surface max DTE<input id="surfDays" type="number" value="60" min="2" step="1"></label>
-    <button id="copyBtn" title="Copy levels as text">Copy levels</button>
-  </div>
-</section>
-
-
-<section id="levelsWrap" class="grid hidden">
-  <div class="panel" style="padding:12px 18px"><h2 style="margin:0">Today's levels · all loaded symbols</h2>
-    <div class="small muted" style="margin-top:6px">Open-interest walls from each symbol's newest file, converted with the futures price saved inside it. Bold = futures price, grey = index / ETF strike. Drop the SPX, NDX and GLD daily files together to fill this page.</div></div>
-  <div id="levelsBody" class="grid"></div>
-</section>
-<section id="classicWrap" class="grid hidden">
-  <div id="classic" class="grid">
-    <div class="panel" style="padding:8px"><div id="mainChart"></div></div>
-    <aside class="side">
-      <h3>classic</h3>
-      <div class="seg" style="display:flex"><button id="cvSpot" class="on">spot price</button><button id="cvFut">futures</button></div>
-      <div class="stack" id="cScope">
-        <button data-v="full" class="on">≤ 90d (agg)</button>
-        <button data-v="zero">latest expiry</button>
-        <button data-v="one">next expiry</button>
-      </div>
-      <div class="sec"><b>update</b>
-        <div class="row"><span>date</span><span id="cDate">–</span></div>
-        <div class="row"><span>time (ET)</span><span id="cTime">–</span></div>
-        <div class="row"><span id="cSym">spot</span><span id="cPx">–</span></div>
-        <div class="row"><span></span><span id="cChg" class="muted">–</span></div>
-      </div>
-      <div class="sec"><b>volume</b>
-        <div class="row"><span class="zero">zero gamma</span><span id="vZero">–</span></div>
-        <div class="row"><span class="pos">major positive</span><span id="vPos">–</span></div>
-        <div class="row"><span class="neg">major negative</span><span id="vNeg">–</span></div>
-        <div class="row"><span>net gex</span><span id="vNet">–</span></div>
-      </div>
-      <div class="sec"><b>open interest</b>
-        <div class="row"><span class="zero">zero gamma</span><span id="oZero">–</span></div>
-        <div class="row"><span class="pos">major positive</span><span id="oPos">–</span></div>
-        <div class="row"><span class="neg">major negative</span><span id="oNeg">–</span></div>
-        <div class="row"><span>net gex</span><span id="oNet">–</span></div>
-      </div>
-      <div class="sec"><b>max change gex <span class="muted" style="font-weight:400">(volume)</span></b>
-        <table class="mc"><tbody id="mcBody"></tbody></table>
-      </div>
-      <div class="sec">
-        <b>history <span class="muted" style="font-weight:400" id="hCount">0 snapshots</span></b>
-        <div class="stack"><button id="hLoad" class="primary">load snapshots (CSV/JSON, multi-select)</button><button id="hClear">clear history</button></div>
-        <input id="hFile" type="file" multiple accept=".csv,.json,.txt" class="hidden">
-        <div class="play"><button id="pPlay">▶</button><select id="pSpeed"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option></select><span id="pTime" class="small muted">–</span></div>
-        <input id="pSlider" type="range" min="0" max="0" value="0" style="width:100%">
-      </div>
-    </aside>
-  </div>
-  <div class="panel"><h2>Volatility smile &amp; volume curve · <select id="smExp"></select> <span class="muted small" id="smNote"></span></h2><div id="smileChart" class="chart short"></div></div>
-</section>
-
-<div id="empty" class="panel">Load a chain to see levels. Try the synthetic demo to explore the interface first.</div>
-
-<section id="out" class="grid hidden" data-view="analytics">
-  <div id="cards" class="grid"></div>
-
-  <div class="grid two">
-    <div class="panel"><h2>Net GEX by strike · OI vs Volume ($M per 1% move)</h2><div id="barChart" class="chart"></div></div>
-    <div class="panel"><h2>Gamma profile · total OI GEX vs hypothetical spot</h2><div id="profChart" class="chart"></div></div>
-  </div>
-
-  <div class="grid two">
-    <div class="panel"><h2>3D dealer gamma surface · strike × days to expiry</h2><div id="gexSurf" class="chart"></div></div>
-    <div class="panel"><h2>Implied volatility surface (OTM, OI-weighted)</h2><div id="ivSurf" class="chart"></div></div>
-  </div>
-
-  <div class="grid two">
-    <div class="panel"><h2>Open interest by strike · calls vs puts</h2><div id="oiChart" class="chart short"></div></div>
-    <div class="panel"><h2>Levels table</h2><div id="levels"></div></div>
-  </div>
-</section>
-
-<section class="panel explain">
-  <h2>Method · what each number means</h2>
-  <details open><summary>GEX, the sign convention, and units</summary>
-    <p>For every contract: <code>GEX = Γ × OI × 100 × S² × 0.01</code>. That is the dollar amount of the underlying that dealers must buy or sell for a 1% move in spot. Γ is recomputed with Black-Scholes from Cboe's implied vol at the current spot (falling back to Cboe's own gamma if IV is missing).</p>
-    <p>The <b>naive dealer convention</b> is used, as in GexBot Classic: customers are assumed to buy calls and sell puts. So dealers are long call gamma (+) and short put gamma (−). Positive net GEX means dealers hedge against the move (selling rallies, buying dips), which damps volatility. Negative net GEX means they hedge with the move, which amplifies it. This convention is a simplification: real positioning is not observable from public data.</p>
-    <p><b>Vol GEX</b> swaps OI for today's traded volume. It shows where today's flow is concentrated, which matters most for 0DTE. <b>Stable / Unstable</b>: if OI GEX and Vol GEX have the same sign, the day's flow agrees with the standing positioning.</p>
-  </details>
-  <details><summary>Zero gamma, majors, and the other levels</summary>
-    <p><b>Zero gamma</b> follows GexBot Classic's documented method: a natural cubic spline is fitted through the per-strike net GEX bars (by volume; by OI when there is no volume yet) and its zero crossing between the Major Negative and Major Positive strikes is reported. <b>Profile flip</b> is a second, independent measure: total OI GEX recomputed at hypothetical spot prices (±25%), crossing nearest spot. Above it dealers are modelled net long gamma, below it net short.</p>
-    <p><b>Major +1/+2</b>: strikes with the largest positive net GEX (call walls, which often act as resistance or magnets). <b>Major −1/−2</b>: the largest negative net GEX (put walls, often support that can break into acceleration). Both are shown for OI and for volume, like GexBot's <code>major_pos_oi</code>, <code>major_neg_oi</code>, <code>major_pos_vol</code>, <code>major_neg_vol</code>.</p>
-    <p><b>25Δ risk reversal</b>: IV of the 25-delta call minus IV of the 25-delta put on the nearest expiry in scope. Negative means puts are bid (normal equity skew); a rising RR signals put demand fading. <b>DEX</b>: net delta exposure of the selected contracts, in $ of underlying. <b>P/C</b>: put/call ratios by OI and by volume.</p>
-    <p><b>Futures conversion</b>: enter the live futures price. For an index (SPX→ES, NDX→NQ) the additive basis (futures − index) is added to every level. For an ETF whose price is far from the futures (GLD→GC, SPY→ES, QQQ→NQ) every level is multiplied by the ratio futures ÷ ETF price instead.</p>
-  </details>
-  <details><summary>Limits</summary>
-    <p>Cboe's free chain is 15-minute delayed; OI is end-of-previous-day. GexBot uses intraday data feeds and proprietary adjustments, so values will not match exactly. This tool is for research and education, not trading advice.</p>
-  </details>
-</section>
-</main>
-<footer>Open GEX Terminal · research and education only, not financial advice · data: Cboe delayed quotes (15 min), OI from the prior close.</footer>
-
-<script type="application/json" id="gldSnap">null</script>
-<script>
-// ===== GEX core: parsing + math (no DOM) =====
+  <div id="side"></div>
+</div>
+<input type="file" id="fileIn" multiple accept=".csv,.json,.txt" style="display:none">
+<div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
+<div id="toast"></div>
+<script>// ===== GEX core: parsing + math (no DOM) =====
 const GEX = (() => {
   const SQ2PI = Math.sqrt(2 * Math.PI);
   const npdf = x => Math.exp(-0.5 * x * x) / SQ2PI;
@@ -325,7 +256,7 @@ const GEX = (() => {
     const rows = [];
     for (const o of d.options) {
       const p = parseSym(o.option); if (!p) continue;
-      rows.push({ ...p, oi: num(o.open_interest), vol: num(o.volume), iv: num(o.iv), gamma: num(o.gamma), delta: num(o.delta) });
+      rows.push({ ...p, oi: num(o.open_interest), vol: num(o.volume), iv: num(o.iv), gamma: num(o.gamma), delta: num(o.delta), bid: num(o.bid), ask: num(o.ask), last: num(o.last_trade_price) });
     }
     let asOf = null;
     if (obj.timestamp) { // Cboe's top-level timestamp is UTC (checked against the CSV export's local time)
@@ -333,7 +264,8 @@ const GEX = (() => {
       if (m) asOf = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
     }
     const sym = String(d.symbol || '').replace(/^_/, '');
-    return { symbol: (sym || (rows[0] && rows[0].root) || '?').replace(/^\^/, '').replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/,'$1'), spot: num(d.current_price) || num(d.close), prevClose: num(d.prev_day_close) || null, asOf, rows };
+    const ohlc = { open: num(d.open), high: num(d.high), low: num(d.low) };
+    return { symbol: (sym || (rows[0] && rows[0].root) || '?').replace(/^\^/, '').replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/,'$1'), spot: num(d.current_price) || num(d.close), prevClose: num(d.prev_day_close) || null, ohlc, asOf, rows };
   }
 
   function parseCboeCSV(text) {
@@ -396,14 +328,20 @@ const GEX = (() => {
     const tm = String(meta.cboe_timestamp_utc || meta.cboe_timestamp_et || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
     if (tm) asOf = Date.UTC(+tm[1], +tm[2] - 1, +tm[3], +tm[4], +tm[5], +(tm[6] || 0));
     const rows = [];
+    const hl = lines.find(l => l.startsWith('option')) || 'option,open_interest,volume,iv,gamma,delta';
+    const H = hl.split(','), ci = n => H.indexOf(n);
+    const I = { oi: ci('open_interest'), vol: ci('volume'), iv: ci('iv'), gamma: ci('gamma'), delta: ci('delta'), bid: ci('bid'), ask: ci('ask'), last: ci('last') };
     for (const l of lines.slice(1)) {
       if (!l || l.startsWith('#') || l.startsWith('option')) continue;
       const c = l.split(',');
       const p = parseSym(c[0]); if (!p) continue;
-      rows.push({ ...p, oi: num(c[1]), vol: num(c[2]), iv: num(c[3]), gamma: num(c[4]), delta: num(c[5]) });
+      const r = { ...p };
+      for (const k in I) r[k] = I[k] >= 0 ? num(c[I[k]]) : 0;
+      rows.push(r);
     }
     const fp = num(meta.futures_price);
-    return { symbol: meta.symbol || (rows[0] && rows[0].root.replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1')) || '', spot: num(meta.spot), prevClose: num(meta.prev_close) || null, asOf, rows,
+    const ohlc = num(meta.high) ? { open: num(meta.open), high: num(meta.high), low: num(meta.low) } : null;
+    return { ohlc, symbol: meta.symbol || (rows[0] && rows[0].root.replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1')) || '', spot: num(meta.spot), prevClose: num(meta.prev_close) || null, asOf, rows,
       futures: fp > 0 ? { symbol: meta.futures || '', price: fp, note: meta.futures_note || '' } : null };
   }
   function parseAny(text) {
@@ -568,614 +506,718 @@ const GEX = (() => {
 })();
 if (typeof module !== 'undefined') module.exports = GEX;
 
+// ===== GEX terminal model: per-snapshot greeks, classic GEX, classified-flow proxy (state), skew =====
+const GM = (() => {
+  const R = 0.04;
+  const QDIV = { SPX: 0.012, XSP: 0.012, SPY: 0.012, NDX: 0.007, QQQ: 0.006, GLD: 0, RUT: 0.012, IWM: 0.012 };
+  const SQ2PI = Math.sqrt(2 * Math.PI);
+  const npdf = x => Math.exp(-0.5 * x * x) / SQ2PI;
+  function ncdf(x) { const t = 1 / (1 + 0.2316419 * Math.abs(x)), d = 0.3989423 * Math.exp(-x * x / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; }
+  // Black-Scholes greeks with continuous dividend q. vanna per 1.00 of vol, charm = dDelta/dt per year (time passing)
+  function greeks(S, K, T, s, r, q, type) {
+    const st = s * Math.sqrt(T), d1 = (Math.log(S / K) + (r - q + 0.5 * s * s) * T) / st, d2 = d1 - st, eq = Math.exp(-q * T), nd = npdf(d1);
+    const g = eq * nd / (S * st);
+    const va = -eq * nd * d2 / s;
+    const common = eq * nd * (2 * (r - q) * T - d2 * st) / (2 * T * st);
+    const d = type === 'C' ? eq * ncdf(d1) : eq * (ncdf(d1) - 1);
+    const ch = type === 'C' ? q * eq * ncdf(d1) - common : -q * eq * ncdf(-d1) - common;
+    return { d, g, va, ch };
+  }
+  const MIN = 60000, DAY = 864e5;
+  const etParts = ms => { const f = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); const o = {}; for (const p of f.formatToParts(new Date(ms))) o[p.type] = p.value; return o; };
+  const etDay = ms => { const o = etParts(ms); return `${o.year}-${o.month}-${o.day}`; };
+  const baseSym = s => String(s || '').toUpperCase().replace(/^\^|^_/, '');
+
+  // ---- per-snapshot preparation (greeks at the snapshot's spot and time) ----
+  function prep(snap) {
+    if (snap._p) return snap._p;
+    const S = snap.spot, asOf = snap.asOf || Date.now(), q = QDIV[baseSym(snap.symbol)] ?? 0.012;
+    const minT = 1 / (365 * 24 * 4);
+    const cs = [];
+    for (const r of snap.rows) {
+      const ems = GEX.expiryMs(r.exp); if (ems <= asOf) continue;
+      if (!(r.oi > 0 || r.vol > 0)) continue;
+      const T = Math.max((ems - asOf) / (365 * DAY), minT);
+      const iv = r.iv > 3 ? r.iv / 100 : r.iv;
+      let G;
+      if (iv > 0.005 && iv < 5) G = greeks(S, r.K, T, iv, R, q, r.type);
+      else G = { d: r.delta || 0, g: r.gamma > 0 ? r.gamma : 0, va: 0, ch: 0 };
+      // aggressor proxy: where the last print sits inside the quote (1 = at ask = taker bought, 0 = at bid = taker sold)
+      let p = 0.5;
+      if (r.ask > 0 && r.ask > r.bid && r.last > 0) p = Math.min(1, Math.max(0, (r.last - r.bid) / (r.ask - r.bid)));
+      cs.push({ key: r.exp + r.type + r.K, exp: r.exp, type: r.type, K: r.K, oi: r.oi, vol: r.vol, iv, T, dte: (ems - asOf) / DAY, ems, p, ...G });
+    }
+    const exps = [...new Set(cs.map(c => c.exp))].sort();
+    for (const c of cs) c.ei = exps.indexOf(c.exp);
+    snap._p = { S, asOf, q, exps, cs, day: etDay(asOf) };
+    return snap._p;
+  }
+  const inScope = (c, scope) => scope === 'zero' ? c.ei === 0 : scope === 'one' ? c.ei === 1 : c.dte <= 90;
+
+  // ---- spline zero crossing between the majors (GexBot zero gamma) ----
+  function spline(xs, ys) {
+    const n = xs.length, h = [], a = [], l = [1], mu = [0], z = [0], c = new Array(n).fill(0), b = [], d = [];
+    for (let i = 0; i < n - 1; i++) h[i] = xs[i + 1] - xs[i];
+    for (let i = 1; i < n - 1; i++) a[i] = 3 / h[i] * (ys[i + 1] - ys[i]) - 3 / h[i - 1] * (ys[i] - ys[i - 1]);
+    for (let i = 1; i < n - 1; i++) { l[i] = 2 * (xs[i + 1] - xs[i - 1]) - h[i - 1] * mu[i - 1]; mu[i] = h[i] / l[i]; z[i] = (a[i] - h[i - 1] * z[i - 1]) / l[i]; }
+    for (let j = n - 2; j >= 0; j--) { c[j] = z[j] - mu[j] * c[j + 1]; b[j] = (ys[j + 1] - ys[j]) / h[j] - h[j] * (c[j + 1] + 2 * c[j]) / 3; d[j] = (c[j + 1] - c[j]) / (3 * h[j]); }
+    return x => { let i = 0; while (i < n - 2 && x > xs[i + 1]) i++; const t = x - xs[i]; return ys[i] + b[i] * t + c[i] * t * t + d[i] * t * t * t; };
+  }
+  function zeroBetween(ks, vals, k1, k2, S) {
+    if (k1 == null || k2 == null || ks.length < 4 || !vals.some(v => v)) return null;
+    const f = spline(ks, vals), lo = Math.min(k1, k2), hi = Math.max(k1, k2), N = 600; let best = null, px = lo, py = f(lo);
+    for (let i = 1; i <= N; i++) { const x = lo + (hi - lo) * i / N, y = f(x); if ((py <= 0) !== (y <= 0)) { const zx = px + (x - px) * py / (py - y); if (best == null || Math.abs(zx - S) < Math.abs(best - S)) best = zx; } px = x; py = y; }
+    return best;
+  }
+  const majorsOf = (arr, key) => {
+    let pos = null, neg = null;
+    for (const s of arr) { if (s[key] > 0 && (!pos || s[key] > pos[key])) pos = s; if (s[key] < 0 && (!neg || s[key] < neg[key])) neg = s; }
+    return { pos: pos ? pos.K : null, neg: neg ? neg.K : null };
+  };
+
+  // ---- classic: naive GEX (calls +, puts -) by OI and by volume ----
+  function classic(snap, scope) {
+    snap._c = snap._c || {};
+    if (snap._c[scope]) return snap._c[scope];
+    const P = prep(snap), S = P.S, unit = S * S * 0.01 * 100;
+    const byK = new Map(); let netOI = 0, netVol = 0, volTot = 0;
+    for (const c of P.cs) {
+      if (!inScope(c, scope)) continue;
+      const sg = c.type === 'C' ? 1 : -1, gOI = sg * c.g * c.oi * unit, gV = sg * c.g * c.vol * unit;
+      netOI += gOI; netVol += gV; volTot += c.vol;
+      const e = byK.get(c.K) || { K: c.K, oi: 0, vol: 0 }; e.oi += gOI; e.vol += gV; byK.set(c.K, e);
+    }
+    const strikes = [...byK.values()].sort((a, b) => a.K - b.K);
+    const near = strikes.filter(s => Math.abs(s.K / S - 1) <= (baseSym(snap.symbol) === 'GLD' ? 0.12 : 0.06));
+    const mo = majorsOf(near, 'oi'), mv = majorsOf(near, 'vol'), ks = near.map(s => s.K);
+    const res = {
+      S, scope, strikes, netOI, netVol, hasVol: volTot > 0,
+      oi: { pos: mo.pos, neg: mo.neg, zero: zeroBetween(ks, near.map(s => s.oi), mo.neg, mo.pos, S) },
+      vol: { pos: mv.pos, neg: mv.neg, zero: zeroBetween(ks, near.map(s => s.vol), mv.neg, mv.pos, S) },
+      exps: P.exps,
+    };
+    snap._c[scope] = res; return res;
+  }
+
+  // ---- state: classified-flow proxy, cumulative over the session's snapshots ----
+  // Each snapshot's new volume (vs the previous snapshot of the same day) is split taker-long / taker-short by
+  // where that contract's last print sits inside the bid/ask. A first snapshot classifies its whole day volume.
+  function imbalance(snaps, i) {
+    const s = snaps[i]; if (s._imb) return s._imb;
+    let j = i; const day = prep(s).day;
+    while (j > 0 && !snaps[j - 1]._imb && prep(snaps[j - 1]).day === day) j--;
+    for (let k = j; k <= i; k++) {
+      const cur = snaps[k]; if (cur._imb) continue;
+      const prev = k > 0 && prep(snaps[k - 1]).day === prep(cur).day ? snaps[k - 1]._imb : null;
+      const m = new Map();
+      for (const c of prep(cur).cs) {
+        const pv = prev && prev.get(c.key);
+        let dv = c.vol, L = 0, Sh = 0;
+        if (pv) { if (c.vol >= pv.vol) { dv = c.vol - pv.vol; L = pv.L; Sh = pv.Sh; } }
+        L += dv * c.p; Sh += dv * (1 - c.p);
+        m.set(c.key, { vol: c.vol, L, Sh });
+      }
+      cur._imb = m;
+    }
+    return s._imb;
+  }
+  // mode: profile | delta | gamma | vanna | charm | gexprofile ; scope: zero | one | full
+  function state(snaps, i, mode, scope) {
+    const s = snaps[i]; s._s = s._s || {}; const ck = mode + scope;
+    if (s._s[ck]) return s._s[ck];
+    const P = prep(s), S = P.S, imb = imbalance(snaps, i), unit = S * S * 0.01 * 100;
+    const byK = new Map(); let net = 0;
+    for (const c of P.cs) {
+      if (!inScope(c, scope)) continue;
+      const f = imb.get(c.key); if (!f) continue;
+      const N = f.L - f.Sh; // taker net contracts (+ long)
+      const e = byK.get(c.K) || { K: c.K, v: 0, cl: 0, cs: 0, pl: 0, ps: 0, ci: 0, pi: 0 };
+      if (mode === 'profile') { if (c.type === 'C') { e.cl += f.L; e.cs -= f.Sh; } else { e.pl += f.L; e.ps -= f.Sh; } e.v += f.L - f.Sh; }
+      else if (mode === 'delta') e.v += N * c.d * 100 * S;
+      else if (mode === 'gamma') e.v += N * c.g * unit;
+      else if (mode === 'vanna') e.v += N * c.va * (-c.iv) * 100 * S;
+      else if (mode === 'charm') e.v += N * c.ch * 100 * S / (365 * 24);
+      else if (mode === 'gexprofile') { const x = N * c.g * unit; if (c.type === 'C') e.ci += x; else e.pi += x; }
+      byK.set(c.K, e);
+    }
+    const strikes = [...byK.values()].sort((a, b) => a.K - b.K);
+    if (mode === 'gexprofile') for (const e of strikes) e.v = Math.abs(e.ci) - Math.abs(e.pi);
+    for (const e of strikes) net += e.v;
+    const near = strikes.filter(x => Math.abs(x.K / S - 1) <= (baseSym(s.symbol) === 'GLD' ? 0.12 : 0.06));
+    let maj;
+    if (mode === 'profile') {
+      let L = null, Sh = null; for (const e of near) { const l = e.cl + e.pl, sh = e.cs + e.ps; if (l > 0 && (!L || l > L.x)) L = { K: e.K, x: l }; if (sh < 0 && (!Sh || sh < Sh.x)) Sh = { K: e.K, x: sh }; }
+      maj = { pos: L && L.K, neg: Sh && Sh.K };
+    } else maj = majorsOf(near, 'v');
+    const res = { S, mode, scope, strikes, net, maj, exps: P.exps };
+    s._s[ck] = res; return res;
+  }
+
+  // ---- 0DTE skew dots and the ±1σ expected move ----
+  function skew(snap) {
+    if (snap._k) return snap._k;
+    const P = prep(snap), S = P.S;
+    const z = P.cs.filter(c => c.ei === 0 && c.iv > 0.005 && c.iv < 4 && Math.abs(c.K / S - 1) < 0.15);
+    const calls = z.filter(c => c.type === 'C').map(c => [c.K, c.iv]), puts = z.filter(c => c.type === 'P').map(c => [c.K, c.iv]);
+    const ks = [...new Set(z.map(c => c.K))].sort((a, b) => a - b);
+    let em = null;
+    if (ks.length >= 3) {
+      let ai = 0; for (let k = 1; k < ks.length; k++) if (Math.abs(ks[k] - S) < Math.abs(ks[ai] - S)) ai = k;
+      ai = Math.min(Math.max(ai, 1), ks.length - 2);
+      const ivAt = K => { const v = z.filter(c => c.K === K).map(c => c.iv); return v.reduce((a, b) => a + b, 0) / v.length; };
+      const iv = 0.5 * ivAt(ks[ai]) + 0.25 * ivAt(ks[ai - 1]) + 0.25 * ivAt(ks[ai + 1]);
+      const days = (GEX.expiryMs(P.exps[0]) - P.asOf) / DAY;
+      em = { iv, days, move: S * iv * Math.sqrt(Math.max(days, 0) / 365), exp: P.exps[0] };
+    }
+    snap._k = { calls, puts, em }; return snap._k;
+  }
+
+  // ---- max change over lookback windows (from earlier snapshots of the same day) ----
+  function pastIndex(snaps, i, minutes) {
+    const t = snaps[i].asOf - minutes * MIN, day = prep(snaps[i]).day;
+    let best = -1;
+    const tol = Math.max(2, minutes * 0.5) * MIN;
+    for (let k = i - 1; k >= 0; k--) { if (prep(snaps[k]).day !== day) break; if (snaps[k].asOf <= t + 20000) { if (snaps[k].asOf >= t - tol) best = k; break; } }
+    return best;
+  }
+  function maxChange(snaps, i, scope, key) {
+    const out = [];
+    const cur = classic(snaps[i], scope);
+    const curMap = new Map(cur.strikes.map(s => [s.K, s[key]]));
+    for (const w of [1, 5, 10, 15, 30]) {
+      const j = pastIndex(snaps, i, w);
+      if (j < 0) { out.push({ w, K: null, v: 0 }); continue; }
+      const pm = new Map(classic(snaps[j], scope).strikes.map(s => [s.K, s[key]]));
+      let bk = null, bv = 0;
+      for (const K of new Set([...curMap.keys(), ...pm.keys()])) { if (Math.abs(K / cur.S - 1) > 0.06) continue; const d = (curMap.get(K) || 0) - (pm.get(K) || 0); if (Math.abs(d) > Math.abs(bv)) { bv = d; bk = K; } }
+      out.push({ w, K: bk, v: bv });
+    }
+    return out;
+  }
+
+  return { prep, classic, state, skew, maxChange, pastIndex, etDay, etParts, greeks, QDIV, baseSym };
+})();
+if (typeof module !== 'undefined') module.exports = GM;
 </script>
-<script>
+<script>// ===== GEX terminal UI (GexBot-style classic + state + levels) =====
 (() => {
   const $ = id => document.getElementById(id);
-  const state = { snaps: [], store: {}, sym: null, idx: 0, view: 'classic', scope: 'full', futMode: false, last: null, cache: new Map(), playT: null };
-  // chart palettes for the light (default) and dark themes
-  const PAL = {
-    light: { pos: '#16a34a', neg: '#dc2626', acc: '#2563eb', zero: '#d97706', mut: '#6b7280', grid: '#eef0f3', txt: '#111827', vol: '#7c3aed', price: '#0891b2', zl: '#cbd5e1',
-      posSoft: 'rgba(22,163,74,.30)', negSoft: 'rgba(220,38,38,.30)', posFill: 'rgba(22,163,74,.12)', negFill: 'rgba(220,38,38,.12)', prev: '#2563eb', negLine: '#b91c1c',
-      posTag: '#16a34a', posTagTxt: '#fff', negTag: '#dc2626', negTagTxt: '#fff', zeroTagTxt: '#fff', priceTagTxt: '#fff', oiPos: '#15803d', oiNeg: '#b91c1c', smile0: '#9ca3af', mid: '#f1f5f9', font: 'Inter, ui-sans-serif, system-ui, sans-serif' },
-    dark: { pos: '#22c55e', neg: '#ef4444', acc: '#60a5fa', zero: '#f59e0b', mut: '#8b95a5', grid: '#1f2733', txt: '#e5e7eb', vol: '#a78bfa', price: '#22d3ee', zl: '#475569',
-      posSoft: 'rgba(34,197,94,.40)', negSoft: 'rgba(239,68,68,.40)', posFill: 'rgba(34,197,94,.16)', negFill: 'rgba(239,68,68,.16)', prev: '#60a5fa', negLine: '#ef4444',
-      posTag: '#4ade80', posTagTxt: '#052e16', negTag: '#b91c1c', negTagTxt: '#fff', zeroTagTxt: '#1c1917', priceTagTxt: '#042f2e', oiPos: '#4ade80', oiNeg: '#f87171', smile0: '#94a3b8', mid: '#1e293b', font: 'Inter, ui-sans-serif, system-ui, sans-serif' }
+  const TERMINAL_URL = 'https://abhisat16.github.io/open-gex-terminal/';
+  const FUT = { SPX: 'ES', XSP: 'ES', SPY: 'ES', NDX: 'NQ', QQQ: 'NQ', RUT: 'RTY', IWM: 'RTY', GLD: 'GC' };
+  const RATIO_SYMS = new Set(['GLD', 'SPY', 'QQQ', 'IWM']);
+  const st = {
+    store: {}, sym: null, idx: 0, view: 'classic',
+    cScope: 'full', sMode: 'gexprofile', sScope: 'full', opScope: 'zero', greek: 'gamma',
+    useFut: true, futPx: {}, half: {}, pan: {}, iv: 5, play: null, speed: 1, live: { on: false, last: 0 },
+    set: { bars: 'vol', showOI: true, dots: true, cross: true, chart: 'candles', align: 'center', em: true, skewDots: true },
+    hover: null,
   };
-  let theme = 'light'; try { theme = localStorage.getItem('gexTheme') || 'light'; } catch (e) { }
-  const C = { ...PAL[theme] };
-  document.documentElement.dataset.theme = theme;
-  const baseLayout = () => ({
-    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { color: C.txt, family: C.font, size: 12 },
-    margin: { l: 60, r: 20, t: 10, b: 45 }, hovermode: 'closest',
-    xaxis: { gridcolor: C.grid, zerolinecolor: C.zl, linecolor: C.zl }, yaxis: { gridcolor: C.grid, zerolinecolor: C.zl, linecolor: C.zl },
-    legend: { orientation: 'h', y: 1.02, x: 0, bgcolor: 'rgba(0,0,0,0)' }
-  });
-  const cfg = { displaylogo: false, responsive: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'] };
+  try { Object.assign(st.set, JSON.parse(localStorage.getItem('gexterm.set') || '{}')); } catch (e) {}
+  const saveSet = () => { try { localStorage.setItem('gexterm.set', JSON.stringify(st.set)); } catch (e) {} };
 
-  const msg = (t, cls = 'muted') => { const m = $('msg'); m.className = cls; m.textContent = t; };
-  const fmtB = v => (v == null || !isFinite(v)) ? '–' : (Math.abs(v) >= 1e9 ? (v / 1e9).toFixed(2) + 'B' : (v / 1e6).toFixed(0) + 'M');
-  const fmtK = k => k == null ? '–' : (+k).toLocaleString(undefined, { maximumFractionDigits: 2 });
-  const cur = () => state.snaps[state.idx];
-  // futures basis: entered futures price minus the latest snapshot's spot
-  const basis = () => { const f = parseFloat($('fut').value); const L = state.snaps[state.snaps.length - 1]; const S = L && L.chain.spot; return (f > 0 && S > 0) ? f - S : null; };
-  // futures conversion: additive basis when futures ≈ underlying (SPX→ES, NDX→NQ); a price ratio when they differ a lot (GLD→GC, SPY→ES, QQQ→NQ)
-  const convInfo = () => { const f = parseFloat($('fut').value); const L = state.snaps[state.snaps.length - 1]; const S = L && L.chain.spot; if (!(f > 0 && S > 0)) return null; const ratio = f / S; return { mult: ratio < 0.8 || ratio > 1.25, ratio, b: f - S }; };
-  const conv = k => { const c = convInfo(); if (k == null || !c) return null; return c.mult ? k * c.ratio : k + c.b; };
-  const roundF = v => { const c = convInfo(); return c && c.mult ? Math.round(v * 10) / 10 : Math.round(v * 4) / 4; };
-  const convLabel = () => { const c = convInfo(); return !c ? '' : (c.mult ? '×' + c.ratio.toFixed(4) : 'basis ' + c.b.toFixed(2)); };
-  const fut = conv;
-  const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
-  const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-  const toET = ms => { const p = Object.fromEntries(etFmt.formatToParts(new Date(ms)).map(x => [x.type, x.value])); return `${p.year}-${p.month}-${p.day} ${p.hour === '24' ? '00' : p.hour}:${p.minute}:${p.second}`; };
+  // ---------- helpers ----------
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = (x, d = 2) => x == null || !isFinite(x) ? '–' : x.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const toast = (m, ms = 3200) => { const t = $('toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', ms); };
+  const snaps = () => (st.sym && st.store[st.sym]) || [];
+  const cur = () => snaps()[st.idx];
+  const symOf = s => GM.baseSym(s.symbol).replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1');
+  const etTime = ms => { const o = GM.etParts(ms); let h = +o.hour % 24; const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return `${h}:${o.minute}:${o.second} ${ap}`; };
+  const etDate = ms => { const o = GM.etParts(ms); return `${o.month}/${o.day}/${o.year}`; };
+  const mmdd = iso => iso ? iso.slice(5, 7) + '/' + iso.slice(8, 10) : '–';
+  const etClockMs = (day, h, m) => { const [y, mo, d] = day.split('-').map(Number); return GEX.etToMs(y, mo - 1, d, h, m); };
 
-  // ---------- loading ----------
-  // keep the chain light enough to hold many intraday snapshots: <=120 DTE, strikes within ±30% of spot
-  function prune(ch) {
-    const S = ch.spot, a = ch.asOf || Date.now();
-    if (!(S > 0)) return ch;
-    const lim = a + 120 * 864e5;
-    ch.rows = ch.rows.filter(r => r.K >= S * 0.7 && r.K <= S * 1.3 && GEX.expiryMs(r.exp) <= lim);
-    return ch;
+  // ---------- futures conversion ----------
+  function futInfo(sym) {
+    const arr = st.store[sym] || []; const c = arr[st.sym === sym ? st.idx : arr.length - 1];
+    let fp = null, sp = null, src = '';
+    if (st.futPx[sym] > 0 && c) { fp = st.futPx[sym]; sp = c.spot; src = 'typed'; }
+    else { for (let k = arr.length - 1; k >= 0; k--) if (arr[k].futures && arr[k].futures.price > 0) { fp = arr[k].futures.price; sp = arr[k].spot; src = 'file'; break; } }
+    if (!(fp > 0 && sp > 0)) return null;
+    const ratio = fp / sp, useRatio = RATIO_SYMS.has(sym) || ratio < 0.8 || ratio > 1.25;
+    return { fut: FUT[sym] || 'FUT', ratio, basis: fp - sp, useRatio, src };
   }
-  // snapshots are kept per symbol; Classic/Analytics show the active symbol, the Levels view shows all of them
-  const symKey = s => String(s || '?').toUpperCase().replace(/^\^/, '').replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1');
+  const conv = x => { if (x == null) return null; if (!st.useFut) return x; const f = futInfo(st.sym); if (!f) return x; return f.useRatio ? x * f.ratio : x + f.basis; };
+  const unconv = y => { if (!st.useFut) return y; const f = futInfo(st.sym); if (!f) return y; return f.useRatio ? y / f.ratio : y - f.basis; };
+  const tickerLabel = sym => { const f = futInfo(sym); return f ? `${sym}⇒${f.fut}` : (FUT[sym] ? `${sym}⇒${FUT[sym]}` : sym); };
+  const pxDec = () => (st.sym === 'GLD' && !(st.useFut && futInfo('GLD'))) ? 2 : 2;
+
+  // ---------- ingest ----------
   function addSnap(ch) {
-    const k = symKey(ch.symbol);
-    const arr = state.store[k] || (state.store[k] = []);
-    const i = arr.findIndex(s => s.asOf === ch.asOf);
-    const snap = { asOf: ch.asOf, chain: ch };
-    if (i >= 0) arr[i] = snap; else arr.push(snap);
-    arr.sort((a, b) => a.asOf - b.asOf);
-    return k;
-  }
-  function clearAll() { stopPlay(); state.store = {}; state.sym = null; state.snaps = []; state.idx = 0; state.cache.clear(); }
-  // make one symbol active for Classic / Analytics; its file's futures price (if any) fills the conversion box
-  function setActive(k, quiet) {
-    if (!state.store[k]) return;
-    stopPlay();
-    const changed = state.sym !== k;
-    state.sym = k; state.snaps = state.store[k]; state.idx = state.snaps.length - 1; state.cache.clear();
-    if (changed) {
-      const ch = state.snaps[state.idx].chain;
-      $('rangePct').value = /^GLD/.test(k) ? 10 : 5;
-      if (ch.futures && ch.futures.price > 0) { $('fut').value = ch.futures.price; state.futMode = true; }
-      else { $('fut').value = ''; state.futMode = false; }
-      $('cvFut').classList.toggle('on', state.futMode); $('cvSpot').classList.toggle('on', !state.futMode);
-    }
-    renderSymTabs();
-    if (!quiet) run();
-  }
-  function renderSymTabs() {
-    const ks = Object.keys(state.store);
-    $('symSeg').innerHTML = ks.map(k => `<button data-v="${k}" class="${k === state.sym ? 'on' : ''}">${k}</button>`).join('');
-    $('symSeg').classList.toggle('hidden', ks.length < 2);
-    $('symSeg').querySelectorAll('button').forEach(b => b.onclick = () => setActive(b.dataset.v));
-  }
-  function fileNote(ch) {
-    return ch.futures && ch.futures.price > 0 ? ` (${ch.futures.symbol || 'futures'} ${ch.futures.price} from the file)` : '';
+    if (!ch || !ch.rows || !ch.rows.length || !(ch.spot > 0)) throw new Error('no option rows or spot');
+    ch.symbol = GM.baseSym(ch.symbol).replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1');
+    if (!ch.asOf) ch.asOf = Date.now();
+    const s = ch.symbol; const arr = st.store[s] = st.store[s] || [];
+    const dup = arr.findIndex(x => Math.abs(x.asOf - ch.asOf) < 1000);
+    if (dup >= 0) { if (!arr[dup].futures && ch.futures) arr[dup].futures = ch.futures; return s; }
+    arr.push(ch); arr.sort((a, b) => a.asOf - b.asOf);
+    for (const x of arr) { delete x._imb; delete x._s; } // classification is cumulative: recompute
+    return s;
   }
   async function ingestFiles(files) {
-    let ok = 0, bad = [], added = [], lastKey = null;
+    let ok = 0, bad = []; const syms = new Set();
     for (const f of files) {
       try {
-        const ch = GEX.parseAny(await f.text());
-        if (!ch.rows.length) throw new Error('no option rows');
-        if (!ch.asOf) ch.asOf = f.lastModified || Date.now();
-        if (!ch.spot) throw new Error('no spot price found');
-        lastKey = addSnap(prune(ch)); ok++; added.push(lastKey + fileNote(ch));
-      } catch (e) { bad.push(`${f.name}: ${e.message}`); }
+        const text = await f.text();
+        const parts = text.trim().startsWith('#GEXSNAP') ? text.split(/\n(?=#GEXSNAP)/) : [text];
+        for (const p of parts) { syms.add(addSnap(GEX.parseAny(p))); ok++; }
+      } catch (e) { bad.push(f.name + ': ' + e.message); }
     }
     if (ok) {
-      const multi = Object.keys(state.store).length > 1;
-      setActive(state.sym && state.store[state.sym] && !added.some(a => a.startsWith(state.sym)) ? state.sym : lastKey, true);
-      if (state.sym === lastKey) state.idx = state.snaps.length - 1;
-      msg(`Loaded ${added.join(' · ')}` + (multi ? ' · see the Levels tab for all symbols' : '') + (bad.length ? ` · skipped: ${bad.join('; ')}` : ''), bad.length ? 'warn' : 'pos');
-      if (Object.keys(state.store).length > 1 && state.view !== 'levels' && files.length > 1) selectView('levels');
-    } else msg('Could not load: ' + bad.join('; '), 'neg');
-    run();
+      const pick = st.sym && syms.has(st.sym) ? st.sym : [...syms][0];
+      setSym(pick); if (syms.size > 1 && st.view !== 'levels') toast(`Loaded ${ok} snapshot(s) for ${[...syms].join(', ')}. Switch tickers in the sidebar, or see all in levels.`);
+      else toast(`Loaded ${ok} snapshot(s).`);
+    }
+    if (bad.length) toast('Could not read: ' + bad.join(' · '), 6000);
   }
-  function ingestText(text) {
+  function setSym(sym, keepIdx) {
+    st.sym = sym; const a = snaps(); if (!keepIdx) st.idx = a.length - 1;
+    st.idx = Math.max(0, Math.min(st.idx, a.length - 1));
+    $('empty').style.display = a.length || st.view === 'levels' ? 'none' : 'flex';
+    renderSide(); draw(); if (st.view === 'levels') renderLevels();
+  }
+  function clearAll() { stopPlay(); st.store = {}; st.sym = null; st.idx = 0; idbClear(); renderSide(); draw(); $('empty').style.display = st.view === 'levels' ? 'none' : 'flex'; if (st.view === 'levels') renderLevels(); }
+
+  // ---------- live link (bookmarklet on cboe.com posts snapshots here) ----------
+  const BOOKMARKLET = `javascript:(()=>{const U='${TERMINAL_URL}#live';let w=window.open(U,'gexterm');const L=[['_SPX','SPX'],['_NDX','NDX'],['GLD','GLD']];let last={};async function tick(){for(const[p,s]of L){try{const j=await(await fetch('https://cdn-api.cboe.com/api/global/delayed_quotes/options/'+p+'.json',{cache:'no-store'})).json();if(last[s]===j.timestamp)continue;last[s]=j.timestamp;const D=j.data,X=+D.current_price||+D.close,n=Date.now(),rows=[];for(const o of D.options){const m=o.option.match(/(\\d{2})(\\d{2})(\\d{2})[CP](\\d{8})$/);if(!m)continue;const e=Date.UTC(2000+ +m[1],m[2]-1,+m[3],21),K=m[4]/1000;if(e<n-864e5||(e-n)/864e5>95||K<X*.85||K>X*1.15||!(+o.open_interest||+o.volume))continue;rows.push([o.option,+o.open_interest||0,+o.volume||0,+o.iv||0,+o.gamma||0,+o.delta||0,+o.bid||0,+o.ask||0,+o.last_trade_price||0])}if(!w||w.closed){document.title='GEX link: terminal closed';return}w.postMessage({gexlive:1,symbol:s,spot:X,prev_close:+D.prev_day_close||X,open:+D.open||0,high:+D.high||0,low:+D.low||0,ts:j.timestamp,rows},'*')}catch(e){console.log('gex link',e)}}document.title='● GEX link '+new Date().toLocaleTimeString()}setTimeout(tick,5000);setInterval(tick,60000)})()`;
+  window.addEventListener('message', ev => {
+    const d = ev.data;
+    if (!d || d.gexlive !== 1 || !/^https:\/\/(www\.)?cboe\.com$/.test(ev.origin)) return;
     try {
-      const ch = GEX.parseAny(text); if (!ch.rows.length) throw new Error('No option rows recognised');
-      if (!ch.asOf) ch.asOf = Date.now(); if (!ch.spot) throw new Error('No spot price in the text');
-      const k = addSnap(prune(ch)); setActive(k, true); state.idx = state.snaps.length - 1;
-      msg(`Loaded pasted ${k} snapshot` + fileNote(ch), 'pos'); run();
-    } catch (e) { msg('Could not parse: ' + e.message, 'neg'); }
+      const head = `#GEXSNAP symbol=${d.symbol} spot=${d.spot} prev_close=${d.prev_close} open=${d.open} high=${d.high} low=${d.low} cboe_timestamp_utc=${d.ts}`;
+      const ch = GEX.parseGexSnap(head + '\noption,open_interest,volume,iv,gamma,delta,bid,ask,last\n' + d.rows.map(r => r.join(',')).join('\n'));
+      const prevSym = st.sym, wasLast = st.idx === snaps().length - 1;
+      const s = addSnap(ch); idbPut(ch, d);
+      st.live.on = true; st.live.last = Date.now(); $('liveDot').classList.add('on');
+      if (!prevSym) setSym(s); else if (s === st.sym) { if (wasLast && !st.play) st.idx = snaps().length - 1; renderSide(); draw(); } else renderSide();
+      if (st.view === 'levels') renderLevels();
+    } catch (e) { console.warn('live message', e); }
+  });
+  setInterval(() => { if (st.live.on && Date.now() - st.live.last > 150000) { st.live.on = false; $('liveDot').classList.remove('on'); } }, 15000);
+
+  // live snapshots survive a page reload (IndexedDB, last 2 sessions)
+  let idb = null;
+  function idbOpen() { return new Promise(res => { try { const r = indexedDB.open('gexterm', 1); r.onupgradeneeded = () => r.result.createObjectStore('snaps'); r.onsuccess = () => { idb = r.result; res(idb); }; r.onerror = () => res(null); } catch (e) { res(null); } }); }
+  function idbPut(ch, raw) { if (!idb) return; try { idb.transaction('snaps', 'readwrite').objectStore('snaps').put(raw, ch.symbol + '|' + ch.asOf); } catch (e) {} }
+  function idbClear() { if (!idb) return; try { idb.transaction('snaps', 'readwrite').objectStore('snaps').clear(); } catch (e) {} }
+  async function idbRestore() {
+    const db = await idbOpen(); if (!db) return 0;
+    return new Promise(res => {
+      const out = []; const cutoff = Date.now() - 4 * 864e5;
+      const tx = db.transaction('snaps', 'readwrite'), os = tx.objectStore('snaps'), rq = os.openCursor();
+      rq.onsuccess = () => { const c = rq.result; if (!c) return; const t = +String(c.key).split('|')[1]; if (t < cutoff) c.delete(); else out.push(c.value); c.continue(); };
+      tx.oncomplete = () => { let n = 0; for (const d of out) { try { const head = `#GEXSNAP symbol=${d.symbol} spot=${d.spot} prev_close=${d.prev_close} open=${d.open} high=${d.high} low=${d.low} cboe_timestamp_utc=${d.ts}`; addSnap(GEX.parseGexSnap(head + '\noption,open_interest,volume,iv,gamma,delta,bid,ask,last\n' + d.rows.map(r => r.join(',')).join('\n'))); n++; } catch (e) {} } res(n); };
+      tx.onerror = () => res(0);
+    });
   }
-  const drop = $('drop'), file = $('file');
-  drop.onclick = () => file.click();
-  file.onchange = () => { if (file.files.length) ingestFiles([...file.files]); file.value = ''; };
-  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
-  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hover'); }));
-  drop.addEventListener('drop', e => { const fs = [...e.dataTransfer.files]; if (fs.length) ingestFiles(fs); });
-  $('hLoad').onclick = () => $('hFile').click();
-  $('hFile').onchange = () => { if ($('hFile').files.length) ingestFiles([...$('hFile').files]); $('hFile').value = ''; };
-  $('hClear').onclick = () => { clearAll(); renderSymTabs(); $('levelsWrap').classList.add('hidden'); $('classicWrap').classList.add('hidden'); $('out').classList.add('hidden'); $('empty').classList.remove('hidden'); $('stamp').textContent = 'No data loaded'; msg('History cleared.'); };
-  $('pasteToggle').onclick = () => $('pasteBox').classList.toggle('hidden');
-  $('pasteGo').onclick = () => ingestText($('pasteTxt').value);
-  $('demoBtn').onclick = () => {
-    clearAll(); demoSession().forEach(addSnap); $('fut').value = ''; state.sym = null; setActive('DEMO', true);
-    msg('Synthetic demo session loaded (38 snapshots, 10 min apart). Made-up numbers for exploring the interface, not market data.', 'warn'); run();
-  };
 
-  // ---------- gold mode: GLD options converted to GC futures by price ratio ----------
-  $('goldBtn').onclick = () => {
-    stopPlay();
-    const haveGLD = !!state.store.GLD;
-    const s = JSON.parse(($('gldSnap') && $('gldSnap').textContent.trim()) || 'null');
-    if (!haveGLD && !s) { msg('Gold mode: first download GLD\'s option chain from Cboe (GLD → Options → Download CSV) and drop it in, then enter the GC futures price at that moment in Settings → "Futures price" and click Gold mode again.', 'warn'); return; }
-    if (!haveGLD) {
-      const [Y, M, D, hh, mi] = s.ts.match(/(\d+)-(\d+)-(\d+) (\d+):(\d+)/).slice(1).map(Number);
-      const iso = e => `20${e.slice(0, 2)}-${e.slice(2, 4)}-${e.slice(4, 6)}`;
-      const ch = { symbol: 'GLD', spot: s.spot, asOf: Date.UTC(Y, M - 1, D, hh, mi), futures: { symbol: 'GC', price: s.gc, note: s.gcLabel }, rows: s.rows.map(r => ({ root: 'GLD', exp: iso(s.exps[r[0]]), K: r[1], type: r[2] ? 'C' : 'P', oi: r[3], vol: r[4], iv: r[5], gamma: 0, delta: 0 })) };
-      addSnap(ch); state.sym = null; setActive('GLD', true);
-      msg(`Gold mode: embedded GLD snapshot (Cboe data as of ${s.ts} UTC, Friday's close $${s.spot}) with GC at ${s.gc} (${s.gcLabel}). For fresh levels, download GLD's chain from Cboe, drop it in, and enter the GC price at that moment.`, 'pos');
-    } else if (state.sym !== 'GLD') { setActive('GLD', true); }
-    if (haveGLD) {
-      if (!(parseFloat($('fut').value) > 1000)) msg('Gold mode: enter the GC (gold futures) price at the time you downloaded this GLD file in Settings → "Futures price" to see GC levels.', 'warn');
-      else msg('Gold mode on for your GLD file: levels × (GC ÷ GLD).', 'pos');
-    }
-    $('rangePct').value = 10; state.cache.clear();
-    state.futMode = !!convInfo();
-    $('cvFut').classList.toggle('on', state.futMode); $('cvSpot').classList.toggle('on', !state.futMode);
-    setScope('full');
-  };
-
-  const setThemeBtn = () => { $('themeBtn').textContent = theme === 'light' ? 'Dark mode' : 'Light mode'; };
-  setThemeBtn();
-  $('themeBtn').onclick = () => {
-    theme = theme === 'light' ? 'dark' : 'light'; try { localStorage.setItem('gexTheme', theme); } catch (e) { }
-    Object.assign(C, PAL[theme]); document.documentElement.dataset.theme = theme; setThemeBtn(); run();
-  };
-
-  // ---------- controls ----------
+  // ---------- views ----------
   function selectView(v) {
-    state.view = v;
-    $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
-  }
-  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => { selectView(b.dataset.v); run(); });
-  // one expiry scope shared by both views; the Settings bar and the Classic sidebar stay in sync
-  function setScope(v) {
-    state.scope = v;
-    $('scopeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
-    $('cScope').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
-    run();
-  }
-  $('scopeSeg').querySelectorAll('button').forEach(b => b.onclick = () => setScope(b.dataset.v));
-  $('cScope').querySelectorAll('button').forEach(b => b.onclick = () => setScope(b.dataset.v));
-  $('cvSpot').onclick = () => { state.futMode = false; $('cvSpot').classList.add('on'); $('cvFut').classList.remove('on'); run(); };
-  $('cvFut').onclick = () => {
-    if (basis() == null) { msg('Enter the current futures price in Settings → "Futures price" first (ES for SPX/SPY, NQ for NDX/QQQ, GC for GLD).', 'warn'); $('fut').focus(); return; }
-    state.futMode = true; $('cvFut').classList.add('on'); $('cvSpot').classList.remove('on'); run();
-  };
-  let t; ['maxDays', 'rangePct', 'spot', 'fut', 'rate', 'divq', 'surfDays'].forEach(id => $(id).addEventListener('input', () => {
-    clearTimeout(t); t = setTimeout(() => { if (['rangePct', 'rate', 'divq'].includes(id)) state.cache.clear(); if (id === 'fut' && basis() == null) { state.futMode = false; $('cvSpot').classList.add('on'); $('cvFut').classList.remove('on'); } run(); }, 250);
-  }));
-  $('smExp').onchange = () => smile();
-  $('pSlider').oninput = () => { stopPlay(); state.idx = +$('pSlider').value; run(); };
-  $('pPlay').onclick = () => {
-    if (state.playT) return stopPlay();
-    if (state.idx >= state.snaps.length - 1) state.idx = 0;
-    $('pPlay').textContent = '❚❚';
-    state.playT = setInterval(() => { if (state.idx >= state.snaps.length - 1) return stopPlay(); state.idx++; run(); }, 700 / (+$('pSpeed').value || 1));
-  };
-  function stopPlay() { clearInterval(state.playT); state.playT = null; $('pPlay').textContent = '▶'; }
-  $('copyBtn').onclick = () => {
-    if (!state.last) return;
-    const txt = levelsText(state.last);
-    navigator.clipboard.writeText(txt).then(() => { $('copyBtn').textContent = 'Copied ✓'; setTimeout(() => $('copyBtn').textContent = 'Copy levels', 1500); })
-      .catch(() => { $('pasteBox').classList.remove('hidden'); $('pasteTxt').value = txt; msg('Clipboard blocked. Levels placed in the text box below.', 'warn'); });
-  };
-
-  const common = () => ({ r: +$('rate').value || 0, q: +$('divq').value || 0, rangePct: Math.min(40, Math.max(1, +$('rangePct').value || 5)) });
-  function opts() {
-    const sp = parseFloat($('spot').value);
-    const o = { ...common(), spot: sp > 0 ? sp : undefined, scope: state.scope, maxDays: +$('maxDays').value || 30 };
-    if (o.scope === 'full') { o.scope = 'custom'; o.maxDays = 90; }
-    return o;
+    st.view = v; document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
+    $('levels').style.display = v === 'levels' ? 'block' : 'none';
+    $('cv').style.display = $('tools').style.display = $('wm').style.display = v === 'levels' ? 'none' : '';
+    $('empty').style.display = v !== 'levels' && !snaps().length ? 'flex' : 'none';
+    renderSide(); if (v === 'levels') renderLevels(); else { resize(); draw(); }
   }
 
-  // ---------- main ----------
-  function run() {
-    if (!state.snaps.length) return;
-    state.idx = Math.max(0, Math.min(state.idx, state.snaps.length - 1));
-    $('empty').classList.add('hidden');
-    const S = cur().chain;
-    $('stamp').innerHTML = `${S.symbol || ''} · spot ${S.spot.toFixed(2)} · snapshot ${state.idx + 1}/${state.snaps.length}<br>as of ${toET(cur().asOf).slice(0, 16)} ET`;
-    $('classicWrap').classList.toggle('hidden', state.view !== 'classic');
-    $('out').classList.toggle('hidden', state.view !== 'analytics');
-    $('levelsWrap').classList.toggle('hidden', state.view !== 'levels');
-    checkFutures();
-    if (state.view === 'classic') runClassic(); else if (state.view === 'levels') runLevels(); else runAnalytics();
+  // ---------- sidebar ----------
+  const kv = (k, v, kc = '', vc = '') => `<div class="kv"><span class="${kc}">${k}</span><span class="${vc}">${v}</span></div>`;
+  const P = x => x == null ? '–' : fmt(conv(x), 2);
+  function tickerBlock() {
+    const syms = Object.keys(st.store);
+    const f = st.sym && futInfo(st.sym);
+    return `<div class="fld"><label>ticker</label><select id="symSel">${syms.length ? syms.map(s => `<option value="${s}" ${s === st.sym ? 'selected' : ''}>${tickerLabel(s)}</option>`).join('') : '<option>no data</option>'}</select></div>
+      ${st.sym && FUT[st.sym] ? `<div class="futtog"><button data-f="0" class="${!st.useFut ? 'on' : ''}">${st.sym}</button><button data-f="1" class="${st.useFut ? 'on' : ''}">${FUT[st.sym]}</button></div>
+      ${st.useFut ? `<div class="futin"><span>${FUT[st.sym]} now</span><input id="futIn" placeholder="${f ? (f.src === 'file' ? 'from file' : '') : 'type price'}" value="${st.futPx[st.sym] || ''}" title="Type the current futures price to re-anchor the conversion (optional). Leave empty to use the price saved in the file."></div>` : ''}` : ''}`;
   }
-  // a futures price typed from a different moment than the file (e.g. today's ES on Friday's file) shifts every level
-  function checkFutures() {
-    const c = convInfo(); const S = state.snaps.length && state.snaps[state.snaps.length - 1].chain.spot;
-    const key = $('fut').value + '|' + state.sym;
-    if (!c || !S || key === state.lastFutCheck) return;
-    state.lastFutCheck = key;
-    const off = c.mult ? null : Math.abs(c.b) / S;
-    if (off != null && off > 0.008) msg(`Check the futures price: ${$('fut').value} is ${(c.b).toFixed(1)} points from this file's ${state.sym} price (${S.toFixed(2)}). A normal futures gap is only a few dozen points, so this price is probably from a different time than the file, which would shift every level. Use the futures price from when the file was saved (for a pre-market file, the previous settlement).`, 'warn');
+  function updateBlock(c) {
+    return `<div class="sec">update</div>${kv('date', c ? etDate(c.asOf) : '–')}${kv('time', c ? etTime(c.asOf) : '–')}${kv('spot', c ? P(c.spot) : '–')}`;
   }
-  function runAnalytics() {
-    let R;
-    try { R = GEX.compute(cur().chain, opts()); } catch (e) { msg(e.message, 'neg'); return; }
-    if (!R.nSel) msg('No contracts in this scope. Try "Full" or a larger N days.', 'warn');
-    state.last = R;
-    cards(R); bars(R); profile(R); oiChart(R); levels(R);
-    const so = opts(); so.maxDays = +$('surfDays').value || 60; so.rangePct = Math.max(so.rangePct, 6);
-    try { surf(GEX.surfaces(cur().chain, so)); } catch (e) { console.warn(e); }
+  function playBlock() {
+    const a = snaps(), c = cur(); const days = [...new Set(a.map(s => GM.prep(s).day))];
+    return `<div class="lrow"><span class="chip">${a.length ? a.length + ' loaded' : 'loaded'}</span>
+      ${days.length > 1 ? `<select class="chip date" id="daySel">${days.map(d => `<option ${c && GM.prep(c).day === d ? 'selected' : ''}>${d.slice(5).replace('-', '/')}/${d.slice(0, 4)}</option>`).join('')}</select>` : `<span class="chip date">📅 ${c ? etDate(c.asOf) : '--/--/----'}</span>`}</div>
+      <button class="clr" id="clrBtn"><svg width="11" height="12" viewBox="0 0 11 12" fill="currentColor"><path d="M3.5 0h4l.5 1H11v1.5H0V1h3zM1 3.5h9l-.7 8.5H1.7z"/></svg>clear history</button>
+      <div class="play"><div class="r1"><span class="sp c-or" id="spBtn" title="playback speed">⟲</span><span class="sp" id="spTxt">${st.speed}x</span><span class="t">${c ? etTime(c.asOf) : '--:--:--'}</span><button id="liveJump" title="jump to latest">✕</button></div>
+      <input type="range" id="slider" min="0" max="${Math.max(0, a.length - 1)}" value="${st.idx}">
+      <div class="r2"><button data-p="-1">◂</button><button data-p="-10">◂◂</button><button data-p="play">${st.play ? '❚❚' : '▶'}</button><button data-p="10">▸▸</button><button data-p="1">▸</button></div></div>`;
   }
+  const head = t => `<div class="shead"><h3>${t}</h3><div class="ic"><button id="hlpI" title="help"><svg width="17" height="17" viewBox="0 0 17 17"><circle cx="8.5" cy="8.5" r="7.5" fill="none" stroke="#5fd35f" stroke-width="1.4"/><path d="M6.4 6.6a2.1 2.1 0 1 1 3 1.9c-.6.3-.9.7-.9 1.3v.4" fill="none" stroke="#5fd35f" stroke-width="1.4" stroke-linecap="round"/><circle cx="8.5" cy="12.3" r=".9" fill="#5fd35f"/></svg></button><button id="setI" title="settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1)"/></svg></button></div></div>`;
 
-  function card(k, v, s = '', c = '') { return `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${s}</div></div>`; }
-  function cards(R) {
-    const m = R.majors, f = k => { const x = fut(k); return x == null ? '' : 'fut ' + fmtK(roundF(x)); };
-    const zg = R.zeroG.vol ?? R.zeroG.oi;
-    const regime = R.zero == null ? (R.sumOI > 0 ? 'Long γ (no flip found)' : 'Short γ (no flip found)') : (R.S >= R.zero ? 'Above flip · long γ' : 'Below flip · short γ');
-    const zdist = zg == null ? '' : ((zg / R.S - 1) * 100).toFixed(2) + '% from spot';
-    const scopeTxt = R.scopeExps.length ? (R.scopeExps.length > 2 ? `${R.scopeExps[0]} … ${R.scopeExps[R.scopeExps.length - 1]} (${R.scopeExps.length})` : R.scopeExps.join(', ')) : 'none';
-    $('cards').innerHTML = [
-      card('Spot', fmtK(R.S.toFixed(2)), scopeTxt),
-      card('Zero gamma', zg == null ? '–' : fmtK(zg.toFixed(1)), [zdist, R.zeroG.vol != null && R.zeroG.oi != null ? 'OI: ' + fmtK(R.zeroG.oi.toFixed(1)) : (R.zeroG.vol == null ? 'from OI (no volume)' : ''), f(zg)].filter(Boolean).join(' · '), 'zero'),
-      card('Profile flip', R.zero == null ? '–' : fmtK(R.zero.toFixed(1)), 'GEX vs hypothetical spot', 'zero'),
-      card('Regime', `<span style="font:600 14px/1.35 var(--sans)">${regime}</span>`, '', R.zero == null ? cls(R.sumOI) : (R.S >= R.zero ? 'pos' : 'neg')),
-      card('Net GEX · OI', fmtB(R.sumOI), 'per 1% move', cls(R.sumOI)),
-      card('Net GEX · Vol', fmtB(R.sumVol), 'per 1% move', cls(R.sumVol)),
-      card('Flow vs OI', R.stable ? 'Stable' : 'Unstable', R.stable ? 'Vol & OI GEX agree' : 'Vol & OI GEX disagree', R.stable ? 'pos' : 'warn'),
-      card('Major +1 OI', fmtK(m.posOI[0]), [m.posOI[1] != null ? '+2: ' + fmtK(m.posOI[1]) : '', f(m.posOI[0])].filter(Boolean).join(' · '), 'pos'),
-      card('Major −1 OI', fmtK(m.negOI[0]), [m.negOI[1] != null ? '−2: ' + fmtK(m.negOI[1]) : '', f(m.negOI[0])].filter(Boolean).join(' · '), 'neg'),
-      card('Major +1 Vol', fmtK(m.posVol[0]), [m.posVol[1] != null ? '+2: ' + fmtK(m.posVol[1]) : '', f(m.posVol[0])].filter(Boolean).join(' · '), 'pos'),
-      card('Major −1 Vol', fmtK(m.negVol[0]), [m.negVol[1] != null ? '−2: ' + fmtK(m.negVol[1]) : '', f(m.negVol[0])].filter(Boolean).join(' · '), 'neg'),
-      card('25Δ risk reversal', R.rr == null ? '–' : (R.rr * 100).toFixed(2) + ' vol', 'call IV − put IV', cls(R.rr)),
-      card('DEX (delta $)', fmtB(R.dexOI), 'OI-weighted', cls(R.dexOI)),
-      card('Put/Call · OI', R.pcrOI == null ? '–' : R.pcrOI.toFixed(2), 'Vol: ' + (R.pcrVol == null ? '–' : R.pcrVol.toFixed(2))),
-      card('Contracts used', R.nSel.toLocaleString(), 'of ' + R.nAll.toLocaleString() + ' live'),
-    ].join('');
-  }
-
-  function vline(y, color, text, dash = 'dash') {
-    return { shape: { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, width: 1.5, dash } }, ann: { xref: 'paper', x: 1, y, text, showarrow: false, xanchor: 'right', yanchor: 'bottom', font: { color, size: 11 } } };
-  }
-  function hline(x, color, text, dash = 'dash') {
-    return { shape: { type: 'line', yref: 'paper', y0: 0, y1: 1, x0: x, x1: x, line: { color, width: 1.5, dash } }, ann: { yref: 'paper', y: 1, x, text, showarrow: false, xanchor: 'left', yanchor: 'top', font: { color, size: 11 } } };
-  }
-
-  function bars(R) {
-    const ks = R.strikes.map(s => s.K);
-    const lines = [vline(R.S, C.acc, 'Spot ' + R.S.toFixed(0), 'solid')];
-    const zgb = R.zeroG.vol ?? R.zeroG.oi; if (zgb != null) lines.push(vline(zgb, C.zero, 'Zero γ ' + zgb.toFixed(0)));
-    const L = baseLayout();
-    Object.assign(L, {
-      barmode: 'group', bargap: 0.15,
-      xaxis: { ...L.xaxis, title: { text: 'GEX ($M per 1%)' } }, yaxis: { ...L.yaxis, title: { text: 'Strike' }, type: 'linear' },
-      shapes: lines.map(l => l.shape), annotations: lines.map(l => l.ann), margin: { l: 65, r: 20, t: 30, b: 45 }
-    });
-    Plotly.react('barChart', [
-      { type: 'bar', orientation: 'h', name: 'OI GEX', y: ks, x: R.strikes.map(s => s.oi / 1e6), marker: { color: R.strikes.map(s => s.oi >= 0 ? C.pos : C.neg) }, hovertemplate: 'K %{y}<br>OI GEX %{x:,.1f}M<extra></extra>' },
-      { type: 'bar', orientation: 'h', name: 'Vol GEX', y: ks, x: R.strikes.map(s => s.vol / 1e6), marker: { color: R.strikes.map(s => s.vol >= 0 ? C.posSoft : C.negSoft), line: { color: C.vol, width: .6 } }, hovertemplate: 'K %{y}<br>Vol GEX %{x:,.1f}M<extra></extra>' }
-    ], L, cfg);
-  }
-
-  function profile(R) {
-    const xs = R.prof.map(p => p[0]), ys = R.prof.map(p => p[1] / 1e9);
-    const lines = [hline(R.S, C.acc, ' Spot', 'solid')];
-    if (R.zero != null && R.zero >= xs[0] && R.zero <= xs[xs.length - 1]) lines.push(hline(R.zero, C.zero, ' Flip'));
-    R.majors.posOI.slice(0, 2).forEach((k, i) => lines.push(hline(k, C.pos, ` +${i + 1}`, 'dot')));
-    R.majors.negOI.slice(0, 2).forEach((k, i) => lines.push(hline(k, C.neg, ` −${i + 1}`, 'dot')));
-    const L = baseLayout();
-    Object.assign(L, { xaxis: { ...L.xaxis, title: { text: 'Hypothetical spot' } }, yaxis: { ...L.yaxis, title: { text: 'Total OI GEX ($B per 1%)' } }, shapes: lines.map(l => l.shape), annotations: lines.map(l => l.ann), showlegend: false });
-    Plotly.react('profChart', [
-      { x: xs, y: ys.map(v => Math.max(v, 0)), type: 'scatter', mode: 'none', fill: 'tozeroy', fillcolor: C.posFill, hoverinfo: 'skip' },
-      { x: xs, y: ys.map(v => Math.min(v, 0)), type: 'scatter', mode: 'none', fill: 'tozeroy', fillcolor: C.negFill, hoverinfo: 'skip' },
-      { x: xs, y: ys, type: 'scatter', mode: 'lines', line: { color: C.txt, width: 2 }, hovertemplate: 'Spot %{x:,.0f}<br>GEX %{y:,.2f}B<extra></extra>' }
-    ], L, cfg);
-  }
-
-  function oiChart(R) {
-    const ks = R.strikes.map(s => s.K);
-    const L = baseLayout();
-    const ln = vline(R.S, C.acc, 'Spot', 'solid');
-    Object.assign(L, { barmode: 'relative', xaxis: { ...L.xaxis, title: { text: 'Open interest (contracts)' } }, yaxis: { ...L.yaxis, title: { text: 'Strike' } }, shapes: [ln.shape], annotations: [ln.ann], margin: { l: 65, r: 20, t: 30, b: 45 } });
-    Plotly.react('oiChart', [
-      { type: 'bar', orientation: 'h', name: 'Call OI', y: ks, x: R.strikes.map(s => s.callOI), marker: { color: C.pos } },
-      { type: 'bar', orientation: 'h', name: 'Put OI', y: ks, x: R.strikes.map(s => -s.putOI), marker: { color: C.neg }, customdata: R.strikes.map(s => s.putOI), hovertemplate: 'K %{y}<br>Put OI %{customdata:,}<extra></extra>' }
-    ], L, cfg);
-  }
-
-  function surf(S) {
-    if (!S.exps.length) return;
-    const scene = (zt) => ({
-      xaxis: { title: { text: 'Strike' }, gridcolor: C.grid, backgroundcolor: 'rgba(0,0,0,0)', color: C.mut },
-      yaxis: { title: { text: 'Days to expiry' }, gridcolor: C.grid, backgroundcolor: 'rgba(0,0,0,0)', color: C.mut },
-      zaxis: { title: { text: zt }, gridcolor: C.grid, backgroundcolor: 'rgba(0,0,0,0)', color: C.mut },
-      camera: { eye: { x: 1.55, y: -1.55, z: 0.9 } }, aspectmode: 'manual', aspectratio: { x: 1.4, y: 1, z: 0.7 }
-    });
-    const L1 = baseLayout(); L1.margin = { l: 0, r: 0, t: 0, b: 0 }; L1.scene = scene('GEX $M');
-    const z = S.gex.map(r => r.map(v => v / 1e6));
-    const zmax = Math.max(1, ...z.flat().map(Math.abs));
-    Plotly.react('gexSurf', [{
-      type: 'surface', x: S.strikes, y: S.dtes, z, cmin: -zmax, cmax: zmax,
-      colorscale: [[0, '#7f1d1d'], [0.35, '#ef4444'], [0.5, C.mid], [0.65, '#22c55e'], [1, '#14532d']],
-      colorbar: { title: { text: '$M' }, thickness: 12, len: 0.7 },
-      hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>GEX %{z:,.1f}M<extra></extra>',
-      contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } }
-    }], L1, cfg);
-    const L2 = baseLayout(); L2.margin = { l: 0, r: 0, t: 0, b: 0 }; L2.scene = scene('IV %');
-    Plotly.react('ivSurf', [{
-      type: 'surface', x: S.strikes, y: S.dtes, z: S.iv.map(r => r.map(v => v == null ? null : v * 100)),
-      colorscale: 'Viridis', colorbar: { title: { text: 'IV %' }, thickness: 12, len: 0.7 },
-      hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>IV %{z:.1f}%<extra></extra>'
-    }], L2, cfg);
-  }
-
-  function levelRows(R) {
-    const m = R.majors;
-    return [
-      ['Zero gamma (Vol, spline)', R.zeroG.vol], ['Zero gamma (OI, spline)', R.zeroG.oi], ['Profile flip', R.zero], ['Major +1 (OI)', m.posOI[0]], ['Major +2 (OI)', m.posOI[1]], ['Major −1 (OI)', m.negOI[0]], ['Major −2 (OI)', m.negOI[1]],
-      ['Major +1 (Vol)', m.posVol[0]], ['Major +2 (Vol)', m.posVol[1]], ['Major −1 (Vol)', m.negVol[0]], ['Major −2 (Vol)', m.negVol[1]]
-    ].filter(r => r[1] != null);
-  }
-  function levels(R) {
-    const b = basis();
-    const rows = levelRows(R).map(([n, k]) => {
-      const st = R.strikes.find(s => s.K === k);
-      return `<tr><td>${n}</td><td>${fmtK(+k.toFixed(1))}</td><td>${((k / R.S - 1) * 100).toFixed(2)}%</td><td>${b == null ? '–' : fmtK(roundF(conv(k)))}</td><td class="${st ? cls(st.oi) : ''}">${st ? fmtB(st.oi) : '–'}</td><td class="${st ? cls(st.vol) : ''}">${st ? fmtB(st.vol) : '–'}</td></tr>`;
-    }).join('');
-    $('levels').innerHTML = `<table><thead><tr><th>Level</th><th>Index</th><th>vs spot</th><th>Futures${b == null ? '' : ' (' + convLabel() + ')'}</th><th>OI GEX</th><th>Vol GEX</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="small muted" style="margin-top:8px">Enter a futures price in Settings to convert every level: SPX/NDX use an additive basis (→ES/NQ); ETFs such as GLD, SPY or QQQ use the price ratio (→GC/ES/NQ).</p>`;
-  }
-  function levelsText(R) {
-    const b = basis();
-    const head = `${R.symbol || 'Index'} GEX levels · spot ${R.S.toFixed(2)} · scope ${state.scope} · net OI GEX ${fmtB(R.sumOI)} · net Vol GEX ${fmtB(R.sumVol)}`;
-    return [head, ...levelRows(R).map(([n, k]) => `${n}: ${k.toFixed(1)}${b == null ? '' : '  (fut ' + roundF(conv(k)).toFixed(2) + ')'}`)].join('\n');
-  }
-
-
-  // ---------- Classic view ----------
-  function classicOpts() {
-    const o = { ...common(), lite: true, noVolZero: true };
-    o.scope = state.scope; o.maxDays = +$('maxDays').value || 30;
-    if (o.scope === 'full') { o.scope = 'custom'; o.maxDays = 90; }
-    return o;
-  }
-  function series() {
-    const o = classicOpts(); const key = JSON.stringify(o);
-    let arr = state.cache.get(key);
-    if (!arr) { arr = []; state.cache.set(key, arr); }
-    // compute lazily up to what playback needs
-    for (let i = 0; i <= state.idx; i++) if (!arr[i]) { try { arr[i] = GEX.compute(state.snaps[i].chain, o); } catch (e) { arr[i] = null; } }
-    return arr;
-  }
-  const disp = k => k == null ? null : (state.futMode && convInfo() ? conv(k) : k);
-  const fmtLvl = k => k == null ? '–' : (state.futMode ? roundF(disp(k)).toFixed(2) : disp(k).toFixed(2));
-  const fmtBn = v => v == null ? '–' : (v / 1e9).toFixed(4);
-
-  function runClassic() {
-    const arr = series(); const i = state.idx; const R = arr[i];
-    $('pSlider').max = state.snaps.length - 1; $('pSlider').value = i;
-    $('hCount').textContent = `${state.snaps.length} snapshot${state.snaps.length === 1 ? '' : 's'}`;
-    if (!R) { msg('Could not compute this snapshot.', 'neg'); return; }
-    state.last = R;
-    const et = toET(cur().asOf);
-    $('cDate').textContent = et.slice(0, 10); $('cTime').textContent = et.slice(11, 19); $('pTime').textContent = et.slice(11, 16) + ' ET';
-    $('cSym').textContent = (cur().chain.symbol || 'spot') + (state.futMode ? ' ⇒ fut' : '');
-    $('cPx').textContent = fmtLvl(R.S);
-    const R0 = arr[0];
-    if (R0 && i > 0) { const d = R.S - R0.S; $('cChg').textContent = `(${d >= 0 ? '+' : ''}${d.toFixed(2)} since first snapshot)`; $('cChg').className = cls(d); } else { $('cChg').textContent = ''; }
-    const setv = (id, v, c = '') => { $(id).textContent = v; $(id).className = c; };
-    setv('vZero', fmtLvl(R.zeroG.vol), 'zero'); setv('vPos', fmtLvl(R.majors.posVol[0]), 'pos'); setv('vNeg', fmtLvl(R.majors.negVol[0]), 'neg'); setv('vNet', fmtBn(R.sumVol), cls(R.sumVol));
-    setv('oZero', fmtLvl(R.zeroG.oi), 'zero'); setv('oPos', fmtLvl(R.majors.posOI[0]), 'pos'); setv('oNeg', fmtLvl(R.majors.negOI[0]), 'neg'); setv('oNet', fmtBn(R.sumOI), cls(R.sumOI));
-    maxChange(arr, i);
-    mainChart(arr, i);
-    smile();
-  }
-
-  function maxChange(arr, i) {
-    const now = state.snaps[i].asOf, R = arr[i];
-    const rows = [1, 5, 10, 15, 30].map(w => {
-      let j = -1; const tgt = now - w * 60e3, tol = Math.max(60e3, w * 30e3);
-      for (let k = i - 1; k >= 0; k--) { const a = state.snaps[k].asOf; if (a <= tgt + 30e3) { if (a >= tgt - tol) j = k; break; } }
-      if (j < 0 || !arr[j]) return `<tr><td>${w} min</td><td class="muted">–</td><td class="muted" style="text-align:right">need older snapshot</td></tr>`;
-      const prev = new Map(arr[j].strikes.map(s => [s.K, s.vol]));
-      let best = null;
-      for (const s of R.strikes) { const d = s.vol - (prev.get(s.K) || 0); if (!best || Math.abs(d) > Math.abs(best.d)) best = { K: s.K, d }; }
-      if (!best) return `<tr><td>${w} min</td><td>–</td><td></td></tr>`;
-      return `<tr><td>${w} min</td><td>${fmtLvl(best.K).replace(/\.00$/, '')}</td><td class="${cls(best.d)}" style="text-align:right">${(best.d / 1e9).toFixed(4)}Bn</td></tr>`;
-    });
-    $('mcBody').innerHTML = rows.join('');
-  }
-
-  function mainChart(arr, i) {
-    const R = arr[i];
-    const xs = [], px = [], zg = [], mp = [], mn = [];
-    for (let k = 0; k <= i; k++) { const A = arr[k]; if (!A) continue; xs.push(toET(state.snaps[k].asOf)); px.push(disp(A.S)); zg.push(disp(A.zeroG.vol ?? A.zeroG.oi)); mp.push(disp(A.majors.posVol[0])); mn.push(disp(A.majors.negVol[0])); }
-    const step0 = R.step || 5; const step = Math.abs(disp(R.S + step0) - disp(R.S)) || step0;
-    const ks = R.strikes.map(s => disp(s.K));
-    const prevR = i > 0 ? arr[i - 1] : null;
-    const absv = R.strikes.map(s => Math.max(Math.abs(s.vol), Math.abs(s.oi)) / 1e6).sort((a, b) => b - a);
-    const maxAbs = Math.max(1, absv.length > 6 ? Math.min(absv[0], absv[2] * 1.4) : (absv[0] || 1));
-    const lo = disp(R.S * (1 - common().rangePct / 100)), hi = disp(R.S * (1 + common().rangePct / 100));
-    // time axis range: the session so far (at least an hour so a single snapshot still reads)
-    const t0 = state.snaps[0].asOf, t1 = state.snaps[state.snaps.length - 1].asOf;
-    const xr = [toET(Math.min(t0, t1 - 30 * 60e3) - 5 * 60e3), toET(Math.max(t1, t0 + 30 * 60e3) + 5 * 60e3)];
-    const traces = [
-      { type: 'bar', orientation: 'h', xaxis: 'x2', y: ks, x: R.strikes.map(s => s.oi / 1e6), width: step * 0.85, name: 'GEX by OI',
-        marker: { color: R.strikes.map(s => s.oi >= 0 ? C.posSoft : C.negSoft) }, hovertemplate: '%{y}<br>GEX by OI ($MM): %{x:,.2f}<extra></extra>' },
-      { type: 'bar', orientation: 'h', xaxis: 'x2', y: ks, x: R.strikes.map(s => s.vol / 1e6), width: step * 0.42, name: 'GEX by volume',
-        marker: { color: R.strikes.map(s => s.vol >= 0 ? C.pos : C.neg) }, hovertemplate: '%{y}<br>GEX by volume ($MM): %{x:,.2f}<extra></extra>' },
-    ];
-    if (prevR) {
-      const pv = prevR.strikes.filter(s => Math.abs(s.vol) / 1e6 > maxAbs * 0.02);
-      traces.push({ type: 'scatter', mode: 'markers', xaxis: 'x2', y: pv.map(s => disp(s.K)), x: pv.map(s => s.vol / 1e6), name: 'previous snapshot (vol)',
-        marker: { color: C.prev, size: 5 }, hovertemplate: '%{y}<br>prev GEX by vol: %{x:,.2f}<extra></extra>' });
+  function renderSide() {
+    const c = cur(); let h = '';
+    if (st.view === 'classic') {
+      const r = c && GM.classic(c, st.cScope), exps = c ? GM.prep(c).exps : [];
+      h += head('classic') + tickerBlock();
+      h += `<div class="seg"><button data-cs="full" class="${st.cScope === 'full' ? 'on' : ''}">90d (agg)</button><button data-cs="zero" class="${st.cScope === 'zero' ? 'on' : ''}">latest (${mmdd(exps[0])})</button><button data-cs="one" class="${st.cScope === 'one' ? 'on' : ''}">next (${mmdd(exps[1])})</button></div>`;
+      h += updateBlock(c);
+      h += `<div class="sec">volume</div>` + kv('zero gamma', r ? P(r.vol.zero) : '–', 'c-or', '') + kv('major positive', r ? P(r.vol.pos) : '–', 'c-gr') + kv('major negative', r ? P(r.vol.neg) : '–', 'c-rd') + kv('net gex', r ? fmt(r.netVol / 1e9, 4) : '–', '', r && r.netVol < 0 ? 'c-rd' : 'c-gr');
+      h += `<div class="sec">open interest</div>` + kv('zero gamma', r ? P(r.oi.zero) : '–', 'c-or') + kv('major positive', r ? P(r.oi.pos) : '–', 'c-gr') + kv('major negative', r ? P(r.oi.neg) : '–', 'c-rd') + kv('net gex', r ? fmt(r.netOI / 1e9, 4) : '–', '', r && r.netOI < 0 ? 'c-rd' : 'c-gr');
+      h += `<div class="sec">max change gex</div>`;
+      const mc = c ? GM.maxChange(snaps(), st.idx, st.cScope, 'vol') : [1, 5, 10, 15, 30].map(w => ({ w, K: null, v: 0 }));
+      for (const m of mc) h += `<div class="kv"><span class="c-w${m.w}">${m.w} min</span><span style="display:flex;gap:12px"><span class="${m.v < 0 ? 'c-rd' : m.K ? 'c-gr' : 'c-mu'}">${m.K ? fmt(conv(m.K), 0) : '0'}</span><span class="${m.v < 0 ? 'c-rd' : m.K ? 'c-gr' : 'c-mu'}" style="min-width:58px;text-align:right">${fmt(m.v / 1e9, 4)}Bn</span></span></div>`;
+      h += playBlock();
+      if (c && !r.hasVol) h += `<div class="note">No traded volume in this snapshot yet (pre-market). Bars show open interest until volume arrives.</div>`;
+    } else if (st.view === 'state') {
+      const exps = c ? GM.prep(c).exps : [];
+      h += head('state') + tickerBlock();
+      h += `<div class="sec g" style="border:0;margin-top:4px">gex profile</div><div class="seg">${['full', 'zero', 'one'].map((s, k) => `<button data-gp="${s}" class="${st.sMode === 'gexprofile' && st.sScope === s ? 'on' : ''}">${['90d (agg)', `latest (${mmdd(exps[0])})`, `next (${mmdd(exps[1])})`][k]}</button>`).join('')}</div>`;
+      const opOn = st.sMode !== 'gexprofile';
+      h += `<div class="sec o" style="border:0">options profile</div><div class="opgrid"><div class="seg"><button data-op="zero" class="${opOn && st.opScope === 'zero' ? 'on' : ''}">latest (${mmdd(exps[0])})</button><button data-op="one" class="${opOn && st.opScope === 'one' ? 'on' : ''}">next (${mmdd(exps[1])})</button></div>
+        <div class="tg">${['delta', 'gamma', 'vanna', 'charm'].map(g => `<label><input type="checkbox" data-gk="${g}" ${opOn && st.sMode === g ? 'checked' : ''}><i></i>${g}</label>`).join('')}</div></div>`;
+      h += updateBlock(c);
+      const r = c && GM.state(snaps(), st.idx, st.sMode, st.sMode === 'gexprofile' ? st.sScope : st.opScope);
+      const lab = { gexprofile: ['major positive', 'major negative', 'net gex', 'Bn'], profile: ['major long', 'major short', 'net contracts', ''], delta: ['major long delta', 'major short delta', 'net dex', 'Bn'], gamma: ['major long gamma', 'major short gamma', 'net convexity', 'Bn'], vanna: ['major +vanna', 'major −vanna', 'net −vanna ex', 'MM'], charm: ['major +charm', 'major −charm', 'net charm ex', 'MM/hr'] }[st.sMode];
+      const pc = st.sMode === 'gexprofile' ? ['c-gr', 'c-rd'] : st.sMode === 'profile' ? ['c-or', 'c-pu'] : ['c-cy', 'c-pu'];
+      const scl = lab[3] === 'Bn' ? 1e9 : lab[3].startsWith('MM') ? 1e6 : 1;
+      h += `<div class="sec">volume</div>` + kv(lab[0], r ? P(r.maj.pos) : '–', pc[0]) + kv(lab[1], r ? P(r.maj.neg) : '–', pc[1]) + kv(lab[2], r ? fmt(r.net / scl, scl === 1 ? 0 : 4) + (lab[3] ? ' ' + lab[3] : '') : '–', '', r && r.net < 0 ? 'c-rd' : 'c-gr');
+      const k = c && GM.skew(c);
+      if (k && k.em) h += `<div class="sec">expected move (${mmdd(k.em.exp)})</div>` + kv('atm iv', fmt(k.em.iv * 100, 1) + '%') + kv('±1σ', '±' + fmt(st.useFut && futInfo(st.sym) && futInfo(st.sym).useRatio ? k.em.move * futInfo(st.sym).ratio : k.em.move, 2)) + kv('range', `${P(c.spot - k.em.move)} – ${P(c.spot + k.em.move)}`);
+      h += playBlock();
+      const anyQuotes = c && c.rows.some(x => x.ask > 0);
+      h += `<div class="note">State uses a <b>classification proxy</b>: each interval's new volume is split taker-long / taker-short by where the contract's last trade sits inside its bid/ask. ${anyQuotes ? '' : '<span class="c-or">This file has no bid/ask/last columns, so flow nets to zero — use the live link or a newer daily file.</span>'}</div>`;
+    } else {
+      h += `<div class="shead"><h3>levels</h3></div><div class="note" style="margin-top:0">Key GEX levels for every loaded ticker, in futures terms. Drop all of today's files at once to fill this page.</div>`;
+      h += `<div style="margin-top:14px">${tickerBlock()}</div>` + playBlock();
     }
-    traces.push(
-      { type: 'scatter', mode: 'lines', x: xs, y: mp, name: 'major positive (vol)', line: { color: C.pos, width: 1.4, shape: 'hv' }, hovertemplate: '%{x|%H:%M}<br>major +: %{y:.2f}<extra></extra>' },
-      { type: 'scatter', mode: 'lines', x: xs, y: mn, name: 'major negative (vol)', line: { color: C.negLine, width: 1.4, shape: 'hv' }, hovertemplate: '%{x|%H:%M}<br>major −: %{y:.2f}<extra></extra>' },
-      { type: 'scatter', mode: 'lines', x: xs, y: zg, name: 'zero gamma (vol)', line: { color: C.zero, width: 1.4, shape: 'hv' }, connectgaps: false, hovertemplate: '%{x|%H:%M}<br>zero γ: %{y:.2f}<extra></extra>' },
-      { type: 'scatter', mode: xs.length > 1 ? 'lines' : 'markers', x: xs, y: px, name: 'price', line: { color: C.price, width: 2 }, marker: { color: C.price, size: 7 }, hovertemplate: '%{x|%H:%M}<br>price: %{y:.2f}<extra></extra>' }
-    );
-    const shapes = [], ann = [];
-    const tag = (y, color, txtColor, xpos = 0, anchor = 'left') => {
-      if (y == null) return;
-      shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, width: 1, dash: 'dash' } });
-      ann.push({ xref: 'paper', x: xpos, y, text: (+y).toFixed(2), showarrow: false, xanchor: anchor, bgcolor: color, font: { color: txtColor, size: 11 }, borderpad: 2 });
-    };
-    tag(disp(R.majors.posVol[0]), C.posTag, C.posTagTxt);
-    tag(disp(R.majors.negVol[0]), C.negTag, C.negTagTxt);
-    tag(disp(R.zeroG.vol ?? R.zeroG.oi), C.zero, C.zeroTagTxt, 1, 'right');
-    // open-interest walls (the levels Fredy trades) as dotted lines with right-side tags
-    const oiTag = (k, color, txt) => { if (k == null) return; const y = disp(k); shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, width: 1.2, dash: 'dot' } }); ann.push({ xref: 'paper', x: 1, y, text: `${txt} ${(+y).toFixed(1)}`, showarrow: false, xanchor: 'right', yanchor: 'bottom', font: { color, size: 11 } }); };
-    oiTag(R.majors.posOI[0], C.oiPos, 'OI wall +'); oiTag(R.majors.negOI[0], C.oiNeg, 'OI wall −'); oiTag(R.majors.negOI[1], C.oiNeg, 'OI wall −2');
-    ann.push({ xref: 'paper', x: 0, y: disp(R.S), text: (+disp(R.S)).toFixed(2), showarrow: false, xanchor: 'left', bgcolor: C.price, font: { color: C.priceTagTxt, size: 11 }, borderpad: 2 });
-    shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: disp(R.S), y1: disp(R.S), line: { color: C.price, width: 1 } });
-    const L = baseLayout();
-    Object.assign(L, {
-      barmode: 'overlay', showlegend: true, legend: { orientation: 'h', y: -0.06, x: 0, font: { size: 11 } },
-      margin: { l: 60, r: 10, t: 40, b: 60 },
-      xaxis: { type: 'date', range: xr, gridcolor: C.grid, tickformat: '%H:%M' },
-      xaxis2: { overlaying: 'x', side: 'top', range: [-maxAbs * 1.15, maxAbs * 1.15], showgrid: false, zeroline: true, zerolinecolor: C.zl, tickformat: ',.0f', title: { text: 'GEX ($MM per 1%)', font: { size: 11 } } },
-      yaxis: { range: [lo, hi], gridcolor: C.grid, side: 'left', tickformat: '.0f' },
-      shapes, annotations: ann, hovermode: 'closest'
-    });
-    Plotly.react('mainChart', traces, L, cfg);
+    $('side').innerHTML = h; bindSide();
   }
+  function bindSide() {
+    const on = (sel, ev, fn) => document.querySelectorAll(sel).forEach(e => e.addEventListener(ev, fn));
+    on('#symSel', 'change', e => { stopPlay(); setSym(e.target.value); });
+    on('.futtog button', 'click', e => { st.useFut = e.currentTarget.dataset.f === '1'; renderSide(); draw(); if (st.view === 'levels') renderLevels(); });
+    on('#futIn', 'change', e => { const v = parseFloat(e.target.value); if (v > 0) st.futPx[st.sym] = v; else delete st.futPx[st.sym]; renderSide(); draw(); if (st.view === 'levels') renderLevels(); });
+    on('[data-cs]', 'click', e => { st.cScope = e.currentTarget.dataset.cs; renderSide(); draw(); });
+    on('[data-gp]', 'click', e => { st.sMode = 'gexprofile'; st.sScope = e.currentTarget.dataset.gp; renderSide(); draw(); });
+    on('[data-op]', 'click', e => { st.opScope = e.currentTarget.dataset.op; if (st.sMode === 'gexprofile') st.sMode = st.greek || 'profile'; renderSide(); draw(); });
+    on('[data-gk]', 'change', e => { const g = e.target.dataset.gk; if (e.target.checked) { st.sMode = g; st.greek = g; } else { st.sMode = 'profile'; st.greek = 'profile'; } renderSide(); draw(); });
+    on('#clrBtn', 'click', () => { if (confirm('Clear every loaded snapshot (and the saved live session)?')) clearAll(); });
+    on('#slider', 'input', e => { stopPlay(); st.idx = +e.target.value; renderSide(); draw(); });
+    on('[data-p]', 'click', e => { const p = e.currentTarget.dataset.p; if (p === 'play') togglePlay(); else step(+p); });
+    on('#spBtn,#spTxt', 'click', () => { st.speed = st.speed >= 8 ? 1 : st.speed * 2; renderSide(); if (st.play) { stopPlay(); togglePlay(); } });
+    on('#liveJump', 'click', () => { stopPlay(); st.idx = snaps().length - 1; renderSide(); draw(); });
+    on('#daySel', 'change', e => { const [m, d, y] = e.target.value.split('/'); const day = `${y}-${m}-${d}`; const a = snaps(); let k = a.length - 1; while (k > 0 && GM.prep(a[k]).day !== day) k--; st.idx = k; stopPlay(); renderSide(); draw(); });
+    on('#hlpI', 'click', showHelp); on('#setI', 'click', showSettings);
+  }
+  function step(n) { const a = snaps(); if (!a.length) return; st.idx = Math.max(0, Math.min(a.length - 1, st.idx + n)); renderSide(); draw(); }
+  function togglePlay() {
+    if (st.play) return stopPlay();
+    if (st.idx >= snaps().length - 1) st.idx = 0;
+    st.play = setInterval(() => { if (st.idx >= snaps().length - 1) { stopPlay(); renderSide(); return; } st.idx++; renderSide(); draw(); }, 700 / st.speed);
+    renderSide();
+  }
+  function stopPlay() { if (st.play) { clearInterval(st.play); st.play = null; } }
 
-  // volatility smile + volume curve for one expiry of the current snapshot
-  function smile() {
-    const ch = cur().chain, S = ch.spot, a = cur().asOf;
-    const exps = [...new Set(ch.rows.map(r => r.exp))].filter(e => GEX.expiryMs(e) > a).sort().slice(0, 40);
-    const sel = $('smExp'); const prev = sel.value;
-    const R = state.last;
-    const want = exps.includes(prev) ? prev : ((R && R.scopeExps[0]) || exps[0]);
-    sel.innerHTML = exps.map(e => `<option value="${e}"${e === want ? ' selected' : ''}>${e} (${((GEX.expiryMs(e) - a) / 864e5).toFixed(1)}d)</option>`).join('');
-    const exp = sel.value; if (!exp) return;
-    const build = chain => {
-      const m = new Map();
-      for (const r of chain.rows) {
-        if (r.exp !== exp) continue;
-        const e = m.get(r.K) || { K: r.K, civ: null, piv: null, cv: 0, pv: 0 };
-        const iv = r.iv > 3 ? r.iv / 100 : r.iv;
-        if (r.type === 'C') { e.cv += r.vol; if (iv > 0.005 && iv < 3) e.civ = iv; } else { e.pv += r.vol; if (iv > 0.005 && iv < 3) e.piv = iv; }
-        m.set(r.K, e);
-      }
-      const span = Math.max(common().rangePct * 1.6, 4) / 100;
-      return [...m.values()].filter(e => e.K >= chain.spot * (1 - span) && e.K <= chain.spot * (1 + span)).sort((x, y) => x.K - y.K);
-    };
-    const pts = build(ch);
-    const otm = pts.map(e => e.K < S ? (e.piv ?? e.civ) : (e.civ ?? e.piv));
-    const x = pts.map(e => disp(e.K));
-    const traces = [
-      { type: 'bar', x, y: pts.map(e => e.cv), name: 'call volume', yaxis: 'y2', marker: { color: C.posFill.replace('.12', '.35').replace('.16', '.35') }, hovertemplate: '%{x}<br>call vol %{y:,}<extra></extra>' },
-      { type: 'bar', x, y: pts.map(e => e.pv), name: 'put volume', yaxis: 'y2', marker: { color: C.negFill.replace('.12', '.35').replace('.16', '.35') }, hovertemplate: '%{x}<br>put vol %{y:,}<extra></extra>' },
-      { type: 'scatter', mode: 'lines', x, y: pts.map(e => e.civ == null ? null : e.civ * 100), name: 'call IV', line: { color: C.pos, width: 1, dash: 'dot' }, connectgaps: true },
-      { type: 'scatter', mode: 'lines', x, y: pts.map(e => e.piv == null ? null : e.piv * 100), name: 'put IV', line: { color: C.neg, width: 1, dash: 'dot' }, connectgaps: true },
-      { type: 'scatter', mode: 'lines+markers', x, y: otm.map(v => v == null ? null : v * 100), name: 'smile (OTM IV)', line: { color: C.txt, width: 2.2 }, marker: { size: 3 }, connectgaps: true, hovertemplate: '%{x}<br>IV %{y:.2f}%<extra></extra>' },
-    ];
-    let note = '';
-    if (state.idx > 0) {
-      const first = state.snaps[0].chain; const p0 = build(first);
-      if (p0.length) {
-        traces.push({ type: 'scatter', mode: 'lines', x: p0.map(e => disp(e.K)), y: p0.map(e => { const v = e.K < first.spot ? (e.piv ?? e.civ) : (e.civ ?? e.piv); return v == null ? null : v * 100; }), name: 'smile at first snapshot', line: { color: C.smile0, width: 1.2, dash: 'dash' }, connectgaps: true });
-        note = `dashed = ${toET(state.snaps[0].asOf).slice(11, 16)} ET`;
+  // ---------- chart ----------
+  const cv = $('cv'), ctx = cv.getContext('2d'); let W = 0, H = 0, DPR = 1;
+  function resize() { const r = cv.getBoundingClientRect(); DPR = window.devicePixelRatio || 1; W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); }
+  const L = { l: 62, r: 78, t: 24, b: 28 };
+  let geo = null; // last drawn geometry for hover
+
+  function sessionSnaps() { const a = snaps(), c = cur(); if (!c) return []; const day = GM.prep(c).day; return a.filter(s => GM.prep(s).day === day); }
+  function timeRange(day, ss) {
+    let t0 = etClockMs(day, 9, 30), t1 = etClockMs(day, 16, 0);
+    if (ss.length) { t0 = Math.min(t0, ss[0].asOf); t1 = Math.max(t1, ss[ss.length - 1].asOf); }
+    const span = t1 - t0; return [t0 - span * 0.03, t1 + span * 0.03];
+  }
+  function niceStep(range, n) { const raw = range / n, p = Math.pow(10, Math.floor(Math.log10(raw))); return [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= raw) || 10 * p; }
+
+  function draw() {
+    if (st.view === 'levels') return;
+    if (!W) resize();
+    const c = cur();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.fillStyle = css('--bg'); ctx.fillRect(0, 0, W, H);
+    $('wmv').textContent = c ? `${st.view} · ${symOf(c)}` : 'open';
+    if (!c) { geo = null; return; }
+    const sym = st.sym, P0 = GM.prep(c), S = c.spot, Sd = conv(S);
+    const pw = W - L.l - L.r, ph = H - L.t - L.b - (st.view === 'state' ? 14 : 0);
+    const defHalf = S * (sym === 'GLD' ? 0.035 : 0.0105);
+    const half = st.half[sym] || defHalf, mid = Sd + (st.pan[sym] || 0);
+    const ratio = st.useFut && futInfo(sym) && futInfo(sym).useRatio ? futInfo(sym).ratio : 1;
+    const hd = half * ratio;
+    const y = v => L.t + ph * (1 - (v - (mid - hd)) / (2 * hd));
+    const yInv = py => mid - hd + (1 - (py - L.t) / ph) * 2 * hd;
+    const ss = sessionSnaps(); const [t0, t1] = timeRange(P0.day, ss);
+    const x = t => L.l + pw * (t - t0) / (t1 - t0);
+    const xc = L.l + pw * (st.set.align === 'left' ? 0.08 : st.set.align === 'right' ? 0.55 : 0.5), maxLen = pw * (st.set.align === 'center' ? 0.46 : 0.42);
+    const axisC = css('--axis'), gridC = css('--grid'), muted = css('--muted');
+    ctx.font = '10px "JetBrains Mono", monospace'; ctx.textBaseline = 'middle';
+
+    // price grid + labels (left)
+    const stp = niceStep(2 * hd, Math.max(6, Math.floor(ph / 26)));
+    ctx.textAlign = 'right';
+    for (let v = Math.ceil((mid - hd) / stp) * stp; v <= mid + hd; v += stp) {
+      const yy = y(v); ctx.strokeStyle = gridC; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L.l, yy + .5); ctx.lineTo(L.l + pw, yy + .5); ctx.stroke();
+      ctx.fillStyle = axisC; ctx.fillText(fmt(v, stp < 1 ? 2 : 0).replace(/,/g, ''), L.l - 8, yy);
+    }
+    // time axis
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = axisC;
+    const nT = Math.max(3, Math.floor(pw / 105));
+    for (let k = 0; k <= nT; k++) { const t = t0 + (t1 - t0) * (k + 0.5) / (nT + 1); ctx.fillText(etTime(t).replace(/(\d+:\d+):\d+ /, '$1:00 ').toLowerCase(), x(t), H - L.b + 9); }
+    ctx.textBaseline = 'middle';
+
+    // ---- spot history (candles or line) ----
+    if (ss.length) {
+      if (st.set.chart === 'line' || ss.length < 15) {
+        ctx.strokeStyle = css('--candleUp'); ctx.lineWidth = 1.4; ctx.beginPath();
+        ss.forEach((s, k) => { if (s.asOf > c.asOf) return; const X = x(s.asOf), Y = y(conv(s.spot)); k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke();
+        ctx.fillStyle = css('--candleUp'); for (const s of ss) { if (s.asOf > c.asOf) break; ctx.beginPath(); ctx.arc(x(s.asOf), y(conv(s.spot)), 2.6, 0, 7); ctx.fill(); }
+      } else {
+        const iv = st.iv * 60000, buckets = new Map();
+        for (const s of ss) { if (s.asOf > c.asOf) break; const b = Math.floor(s.asOf / iv) * iv; const v = conv(s.spot); const e = buckets.get(b); if (!e) buckets.set(b, { o: v, h: v, l: v, c: v }); else { e.h = Math.max(e.h, v); e.l = Math.min(e.l, v); e.c = v; } }
+        const bw = Math.max(1.5, Math.min(12, pw * iv / (t1 - t0) * 0.7));
+        for (const [b, e] of buckets) {
+          const X = x(b + iv / 2), up = e.c >= e.o; ctx.strokeStyle = ctx.fillStyle = up ? css('--candleUp') : css('--candleDn');
+          ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X, y(e.h)); ctx.lineTo(X, y(e.l)); ctx.stroke();
+          const yo = y(e.o), yc = y(e.c); ctx.fillRect(X - bw / 2, Math.min(yo, yc), bw, Math.max(1, Math.abs(yc - yo)));
+        }
       }
     }
-    $('smNote').textContent = note;
-    const L = baseLayout();
-    const ln = { type: 'line', yref: 'paper', y0: 0, y1: 1, x0: disp(S), x1: disp(S), line: { color: C.price, width: 1 } };
-    Object.assign(L, { barmode: 'group', bargap: 0.1, xaxis: { ...L.xaxis, title: { text: 'Strike' } }, yaxis: { ...L.yaxis, title: { text: 'Implied vol (%)' } },
-      yaxis2: { overlaying: 'y', side: 'right', showgrid: false, title: { text: 'Volume (contracts)' }, rangemode: 'tozero' }, shapes: [ln], margin: { l: 60, r: 60, t: 30, b: 45 } });
-    Plotly.react('smileChart', traces, L, cfg);
-  }
 
-  // ---------- Levels view: today's key levels for every loaded symbol, in index and futures prices ----------
-  const LV_PCT = { GLD: 10 };
-  function convFor(ch) {
-    const f = ch.futures && ch.futures.price, S = ch.spot;
-    if (!(f > 0 && S > 0)) return null;
-    const ratio = f / S, mult = ratio < 0.8 || ratio > 1.25;
-    return { sym: ch.futures.symbol || 'fut', note: ch.futures.note || '', mult, ratio, b: f - S, f: k => k == null ? null : (mult ? Math.round(k * ratio * 10) / 10 : Math.round((k + f - S) * 4) / 4) };
-  }
-  function distinctWalls(strikes, key, sign, S) {
-    const arr = strikes.filter(s => sign > 0 ? s[key] > 0 : s[key] < 0).sort((a, b) => sign > 0 ? b[key] - a[key] : a[key] - b[key]);
-    const pick = []; for (const s of arr) { if (pick.length === 3) break; if (pick.every(p => Math.abs(p - s.K) >= S * 0.003)) pick.push(s.K); }
-    return pick;
-  }
-  function runLevels() {
-    const ks = Object.keys(state.store).filter(k => k !== 'DEMO' || Object.keys(state.store).length === 1);
-    const r = +$('rate').value || 0, qIn = +$('divq').value || 0;
-    const html = ks.map(k => {
-      const snaps = state.store[k], ch = snaps[snaps.length - 1].chain, S = ch.spot, cv = convFor(ch);
-      const pct = LV_PCT[k] || 5, q = k === 'GLD' ? 0 : qIn;
-      const scopes = [['90-day OI', { scope: 'custom', maxDays: 90 }], ['Today\'s expiry', { scope: 'zero' }], ['Next expiry', { scope: 'one' }]];
-      const Rs = scopes.map(([, o], i) => { try { return GEX.compute(ch, { ...o, rangePct: pct, r, q, lite: i > 0, noVolZero: true }); } catch (e) { return null; } });
-      const fmt = v => v == null ? '–' : (+v).toLocaleString(undefined, { maximumFractionDigits: 2 });
-      const cell = v => v == null ? '<td>–</td>' : `<td><b>${fmt(cv ? cv.f(v) : v)}</b>${cv ? `<span class="muted"> · ${fmt(v)}</span>` : ''}</td>`;
-      const row = (name, fn, cls = '') => `<tr><td class="${cls}">${name}</td>${Rs.map(R => R ? cell(fn(R)) : '<td>–</td>').join('')}</tr>`;
-      const head = scopes.map(([n], i) => `<th>${n}${Rs[i] && Rs[i].scopeExps.length && i > 0 ? `<br><span class="muted">${Rs[i].scopeExps[0]}</span>` : ''}</th>`).join('');
-      const R0 = Rs[0];
-      const flip = R0 && R0.zero, netAt = R0 && R0.prof && R0.prof.length ? R0.prof.reduce((b, p) => Math.abs(p[0] - S) < Math.abs(b[0] - S) ? p : b)[1] : null;
-      const regime = netAt == null ? '' : (netAt >= 0 ? '<span class="pos">positive gamma: dealer hedging tends to calm moves</span>' : '<span class="neg">negative gamma: dealer hedging tends to speed moves up</span>');
-      const nextW = (R, sign) => { const w = distinctWalls(R.strikes, 'oi', sign, S).slice(1); return w.length ? w.map(x => fmt(cv ? cv.f(x) : x)).join(', ') : '–'; };
-      const ts = new Date(snaps[snaps.length - 1].asOf);
-      return `<div class="panel lvcard">
-        <div class="lvhead"><div><h3>${k}${cv ? ` <span class="muted">→ ${cv.sym}</span>` : ''}</h3>
-          <div class="small muted">Spot ${fmt(S)} · data ${toET(ts.getTime()).slice(0, 16)} ET${cv ? ` · ${cv.sym} ${fmt(ch.futures.price)}${cv.note ? ' (' + cv.note + ')' : ''} · ${cv.mult ? '×' + cv.ratio.toFixed(4) : 'basis ' + (cv.b >= 0 ? '+' : '') + cv.b.toFixed(2)}` : ' · no futures price in file: index prices shown'}</div></div>
-          <button data-open="${k}">Open in Classic</button></div>
-        <table class="lvt"><thead><tr><th>Level${cv ? ` (${cv.sym} · <span class="muted">${k}</span>)` : ''}</th>${head}</tr></thead><tbody>
-          ${row('Call wall (major +)', R => R.majors.posOI[0], 'pos')}
-          ${row('Put wall (major −)', R => R.majors.negOI[0], 'neg')}
-          ${row('Zero gamma', R => R.zeroG.oi, 'zero')}
-          <tr><td>Next call walls</td>${Rs.map(R => `<td>${R ? nextW(R, 1) : '–'}</td>`).join('')}</tr>
-          <tr><td>Next put walls</td>${Rs.map(R => `<td>${R ? nextW(R, -1) : '–'}</td>`).join('')}</tr>
-          <tr><td>Net GEX (OI, $bn per 1%)</td>${Rs.map(R => `<td class="${R && R.sumOI >= 0 ? 'pos' : 'neg'}">${R ? (R.sumOI / 1e9).toFixed(3) : '–'}</td>`).join('')}</tr>
-          <tr><td>Put / call OI</td>${Rs.map(R => `<td>${R && R.pcrOI != null ? R.pcrOI.toFixed(2) : '–'}</td>`).join('')}</tr>
-        </tbody></table>
-        <div class="small" style="margin-top:8px">Gamma flip (90 days): <b>${flip == null ? 'not within ±25%' : fmt(cv ? cv.f(flip) : flip)}</b>${flip != null && cv ? `<span class="muted"> · ${fmt(flip)}</span>` : ''} · ${regime}${k === 'GLD' ? ' · <span class="muted">gold walls are softer than index walls: treat them as zones</span>' : ''}</div>
-      </div>`;
-    }).join('');
-    $('levelsBody').innerHTML = html || '<div class="muted">Load the daily SPX, NDX and GLD files (select all three at once) to see every level here.</div>';
-    $('levelsBody').querySelectorAll('button[data-open]').forEach(b => b.onclick = () => { setActive(b.dataset.open, true); selectView('classic'); run(); });
-  }
-
-  // ---------- synthetic demo session (clearly labelled, not market data) ----------
-  function demoSession() {
-    let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    const gauss = () => { const u = rnd() || 1e-9, v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-    // session date: today in ET if a weekday, else the previous Friday
-    let d = new Date(); const etDay = () => toET(d.getTime()).slice(0, 10);
-    while ([0, 6].includes(new Date(etDay() + 'T12:00:00Z').getUTCDay())) d = new Date(d.getTime() - 864e5);
-    const day = etDay(); const [Y, M, D] = day.split('-').map(Number);
-    const exps = []; for (let k = 0, n = 0; n < 60 && k < 120; k++) { const t = new Date(Date.UTC(Y, M - 1, D + k)); if ([0, 6].includes(t.getUTCDay())) continue; n++; if (n <= 8 || n % 5 === 0) exps.push(t.toISOString().slice(0, 10)); }
-    const S0 = 6000; const tmpl = [];
-    exps.forEach((e, ei) => {
-      const sz = (ei === 0 ? 1 : 0.55 / Math.sqrt(1 + ei)) * 0.12;
-      for (let K = 5550; K <= 6450; K += 5) {
-        const bump = (c, w) => Math.exp(-(((K - c) / w) ** 2));
-        const mny = Math.log(K / S0); const ivb = Math.max(0.07, 0.14 - 0.6 * mny + 3 * mny * mny + 0.01 * Math.sqrt(ei));
-        const r50 = K % 50 === 0 ? 1 : 0, r25 = K % 25 === 0 ? 1 : 0;
-        const cOI = Math.round(sz * (2500 * bump(S0, 150) + 7000 * bump(6075, 15) + 5000 * bump(6150, 20) + 1500 * r50 + 600 * r25) * (0.7 + 0.6 * rnd()));
-        const pOI = Math.round(sz * (3000 * bump(S0, 200) + 8000 * bump(5925, 15) + 6000 * bump(5850, 20) + 1800 * r50 + 700 * r25) * (0.7 + 0.6 * rnd()));
-        const vc = ei === 0 ? 2.2 : 0.3;
-        tmpl.push({ exp: e, K, type: 'C', oi: cOI, fv: cOI * vc * (0.4 + rnd()) * (0.3 + bump(S0 + 35, 90)), ivb });
-        tmpl.push({ exp: e, K, type: 'P', oi: pOI, fv: pOI * vc * (0.4 + rnd()) * (0.3 + bump(S0 - 25, 90)), ivb });
-      }
-    });
-    const snaps = []; let S = S0;
-    for (let mins = 10; mins <= 380; mins += 10) { // 09:40 .. 15:50 ET
-      const asOf = GEX.etToMs(Y, M - 1, D, 9, 30) + mins * 60e3;
-      S = S + gauss() * 6 + (mins > 200 && mins < 280 ? -4 : 0.6);
-      const frac = Math.pow(mins / 390, 0.8);
-      const ivShift = 0.35 * (S0 - S) / S0;
-      const rows = tmpl.map(r => ({ root: 'DEMO', exp: r.exp, type: r.type, K: r.K, oi: r.oi, vol: Math.round(r.fv * frac * (r.type === 'P' && S < S0 ? 1 + 6 * (S0 - S) / S0 : 1)), iv: Math.max(0.05, r.ivb + ivShift), gamma: 0, delta: 0 }));
-      snaps.push({ symbol: 'DEMO', spot: +S.toFixed(2), asOf, rows });
+    // ---- bars ----
+    let bars = [], lookDots = [], colors, majors = [], dotW = [], scaleDiv = 1e9, unit = 'Bn';
+    const visible = s => { const v = conv(s.K); return v >= mid - hd * 1.02 && v <= mid + hd * 1.02; };
+    if (st.view === 'classic') {
+      const r = GM.classic(c, st.cScope);
+      const key = st.set.bars === 'oi' || !r.hasVol ? 'oi' : 'vol';
+      bars = r.strikes.filter(visible).map(s => ({ K: s.K, v: s[key], v2: st.set.showOI && key === 'vol' ? s.oi : null }));
+      colors = [css('--green'), css('--red')];
+      if (st.set.dots) for (const w of [1, 5, 10, 15, 30]) { const j = GM.pastIndex(snaps(), st.idx, w); if (j < 0) continue; const pm = new Map(GM.classic(snaps()[j], st.cScope).strikes.map(s => [s.K, s[key]])); lookDots.push({ w, m: pm }); }
+      majors = [
+        { v: r.vol.pos, c: css('--green'), side: 'L' }, { v: r.vol.neg, c: css('--red'), side: 'L' },
+        { v: r.oi.pos, c: css('--green'), side: 'R' }, { v: r.oi.neg, c: css('--red'), side: 'R' },
+        { v: r[key].zero, c: css('--orange'), side: 'R', dotted: true, small: 'zero γ' },
+      ];
+      if (key === 'oi') majors = majors.filter(m => m.side === 'R');
+      geo = { mode: 'classic', key };
+    } else {
+      const scope = st.sMode === 'gexprofile' ? st.sScope : st.opScope;
+      const r = GM.state(snaps(), st.idx, st.sMode, scope);
+      if (st.sMode === 'profile') { bars = r.strikes.filter(visible).map(s => ({ K: s.K, cl: s.cl, cs: s.cs, pl: s.pl, ps: s.ps, v: Math.max(s.cl + s.pl, -(s.cs + s.ps)) })); colors = [css('--callc'), css('--putc')]; scaleDiv = 1; unit = 'ct'; }
+      else { bars = r.strikes.filter(visible).map(s => ({ K: s.K, v: s.v })); colors = st.sMode === 'gexprofile' ? [css('--green'), css('--red')] : [css('--cyan'), css('--purple')]; scaleDiv = ['vanna', 'charm'].includes(st.sMode) ? 1e6 : 1e9; unit = st.sMode === 'charm' ? 'MM/hr' : scaleDiv === 1e6 ? 'MM' : 'Bn'; }
+      if (st.set.dots && st.sMode !== 'profile') for (const w of st.sMode === 'gexprofile' ? [1, 5, 10, 15, 30] : [5, 15, 30]) { const j = GM.pastIndex(snaps(), st.idx, w); if (j < 0) continue; lookDots.push({ w, m: new Map(GM.state(snaps(), j, st.sMode, scope).strikes.map(s => [s.K, s.v])) }); }
+      majors = [{ v: r.maj.pos, c: colors[0], side: 'L' }, { v: r.maj.neg, c: colors[1], side: 'L' }];
+      geo = { mode: st.sMode, scaleDiv, unit };
     }
-    return snaps;
+    let mx = 0; for (const b of bars) { mx = Math.max(mx, Math.abs(b.v)); if (b.v2 != null) mx = Math.max(mx, Math.abs(b.v2)); if (st.sMode === 'profile' && st.view === 'state') mx = Math.max(mx, Math.abs(b.cl), Math.abs(b.cs), Math.abs(b.pl), Math.abs(b.ps)); }
+    for (const d of lookDots) for (const b of bars) { const v = d.m.get(b.K); if (v != null) mx = Math.max(mx, Math.abs(v)); }
+    const sx = mx > 0 ? maxLen / mx : 0;
+    const ks = bars.map(b => conv(b.K)); let minGap = Infinity; for (let k = 1; k < ks.length; k++) minGap = Math.min(minGap, Math.abs(y(ks[k]) - y(ks[k - 1])));
+    const th = Math.max(1.2, Math.min(isFinite(minGap) ? minGap * 0.62 : 4, 7));
+    // zero axis + label
+    ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(xc + .5, L.t); ctx.lineTo(xc + .5, L.t + ph); ctx.stroke();
+    ctx.fillStyle = axisC; ctx.textAlign = 'center'; ctx.font = '600 10px "JetBrains Mono", monospace'; ctx.fillText('0.00', xc, L.t - 11); ctx.font = '10px "JetBrains Mono", monospace';
+    for (const b of bars) {
+      const Y = y(conv(b.K));
+      if (st.view === 'state' && st.sMode === 'profile') {
+        const h2 = th / 2;
+        ctx.fillStyle = colors[0]; ctx.fillRect(xc, Y - h2 - .3, b.cl * sx, h2); ctx.fillRect(xc + b.cs * sx, Y - h2 - .3, -b.cs * sx, h2);
+        ctx.fillStyle = colors[1]; ctx.fillRect(xc, Y + .3, b.pl * sx, h2); ctx.fillRect(xc + b.ps * sx, Y + .3, -b.ps * sx, h2);
+        continue;
+      }
+      if (b.v2 != null) { ctx.globalAlpha = 0.28; ctx.fillStyle = b.v2 >= 0 ? colors[0] : colors[1]; const L2 = b.v2 * sx; ctx.fillRect(L2 >= 0 ? xc : xc + L2, Y - th * 0.9, Math.abs(L2), th * 1.8); ctx.globalAlpha = 1; }
+      const Lv = b.v * sx; ctx.fillStyle = b.v >= 0 ? colors[0] : colors[1];
+      ctx.fillRect(Lv >= 0 ? xc : xc + Lv, Y - th / 2, Math.abs(Lv), th);
+    }
+    // lookback dots
+    const dotC = { 1: '#e8e8ec', 5: '#46c6e0', 10: '#5a9cf0', 15: '#5560d8', 30: '#4a3fb0' };
+    for (const d of lookDots) { ctx.fillStyle = dotC[d.w]; for (const b of bars) { const v = d.m.get(b.K); if (v == null || !v) continue; ctx.beginPath(); ctx.arc(xc + v * sx, y(conv(b.K)), 1.7, 0, 7); ctx.fill(); } }
+
+    // ---- state extras: skew dots on a secondary axis + expected move ----
+    if (st.view === 'state') {
+      const k = GM.skew(c);
+      if (st.set.skewDots && (k.calls.length || k.puts.length)) {
+        const all = [...k.calls, ...k.puts].filter(p => { const v = conv(p[0]); return v >= mid - hd && v <= mid + hd; }).map(p => p[1]);
+        if (all.length) {
+          all.sort((a, b) => a - b); const lo = all[Math.floor(all.length * 0.02)], hi = all[Math.floor(all.length * 0.98)];
+          const pad = Math.max(0.02, (hi - lo) * 0.15), a0 = Math.max(0, lo - pad), a1 = hi + pad;
+          const xs0 = L.l + pw * 0.62, xs1 = L.l + pw * 0.97, xi = v => xs0 + (xs1 - xs0) * (v - a0) / (a1 - a0);
+          for (const [arr, col] of [[k.puts, css('--red')], [k.calls, css('--green')]]) { ctx.fillStyle = col; for (const [K, ivv] of arr) { const v = conv(K); if (v < mid - hd || v > mid + hd || ivv < a0 || ivv > a1) continue; ctx.beginPath(); ctx.arc(xi(ivv), y(v), 2.1, 0, 7); ctx.fill(); } }
+          ctx.fillStyle = css('--orange'); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          const sst = niceStep(a1 - a0, 4); for (let v = Math.ceil(a0 / sst) * sst; v <= a1; v += sst) ctx.fillText(v.toFixed(2), xi(v), L.t + ph + 3);
+          ctx.textAlign = 'right'; ctx.fillText('0DTE IV', xs0 - 14, L.t + ph + 3); ctx.textBaseline = 'middle';
+        }
+      }
+      if (st.set.em && k.em) for (const sg of [1, -1]) { const v = conv(S + sg * k.em.move); if (v < mid - hd || v > mid + hd) continue; const Y = y(v); ctx.strokeStyle = muted; ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L.l, Y + .5); ctx.lineTo(L.l + pw, Y + .5); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = muted; ctx.textAlign = 'left'; ctx.fillText(sg > 0 ? '+1σ' : '−1σ', L.l + 4, Y - 7); }
+    }
+
+    // ---- level lines ----
+    const labelBox = (txt, X, Y, col, align, fg = '#000') => { ctx.font = '600 10px "JetBrains Mono", monospace'; const w = ctx.measureText(txt).width + 10; const bx = align === 'L' ? X : X - w; ctx.fillStyle = col; roundRect(bx, Y - 8, w, 16, 3); ctx.fill(); ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.fillText(txt, bx + w / 2, Y + .5); ctx.font = '10px "JetBrains Mono", monospace'; };
+    const lc = majors.filter(m => m.v != null);
+    for (const m of lc) {
+      const v = conv(m.v); if (v < mid - hd || v > mid + hd) continue; const Y = Math.round(y(v)) + .5;
+      ctx.strokeStyle = m.c; ctx.globalAlpha = m.dotted ? 0.8 : 0.55; ctx.lineWidth = 1; ctx.setLineDash(m.dotted ? [1, 3] : [5, 4]); ctx.beginPath(); ctx.moveTo(L.l, Y); ctx.lineTo(L.l + pw, Y); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      const txt = fmt(v, 2).replace(/,/g, '');
+      if (m.small) { ctx.fillStyle = m.c; ctx.textAlign = 'right'; ctx.fillText(`${m.small} ${txt}`, L.l + pw - 4, Y - 7); }
+      else if (m.side === 'L') labelBox(txt, L.l + 34, Y, darken(m.c), 'L', '#fff');
+      else labelBox(txt, L.l + pw + L.r - 6, Y, m.c, 'R', '#000');
+    }
+    // spot line + label, current time line
+    const Ys = Math.round(y(Sd)) + .5;
+    ctx.strokeStyle = axisC; ctx.globalAlpha = 0.75; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L.l, Ys); ctx.lineTo(L.l + pw, Ys); ctx.stroke();
+    const Xt = Math.round(x(c.asOf)) + .5; ctx.globalAlpha = 0.45; ctx.beginPath(); ctx.moveTo(Xt, L.t); ctx.lineTo(Xt, L.t + ph); ctx.stroke(); ctx.globalAlpha = 1;
+    labelBox(fmt(Sd, 2).replace(/,/g, ''), 2, Ys, css('--spotbg'), 'L', css('--spotfg'));
+    // bar scale hint
+    if (mx > 0) { ctx.fillStyle = muted; ctx.textAlign = 'right'; ctx.fillText(`${fmt(mx / scaleDiv, unit === 'ct' ? 0 : 3)} ${unit === 'ct' ? 'contracts' : unit}`, xc + maxLen, L.t - 11); }
+    // crosshair
+    if (st.hover && st.set.cross) {
+      const { px, py } = st.hover; if (px > L.l && px < L.l + pw && py > L.t && py < L.t + ph) {
+        ctx.strokeStyle = muted; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(L.l, py + .5); ctx.lineTo(L.l + pw, py + .5); ctx.moveTo(px + .5, L.t); ctx.lineTo(px + .5, L.t + ph); ctx.stroke(); ctx.setLineDash([]);
+        labelBox(fmt(yInv(py), 2).replace(/,/g, ''), 2, py, css('--panel2'), 'L', css('--text'));
+      }
+    }
+    Object.assign(geo, { y, yInv, x, xc, sx, bars, pw, ph, mid, hd, t0, t1 });
   }
+  function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function darken(c) { const m = c.match(/^#(..)(..)(..)$/); if (!m) return c; const f = v => Math.round(parseInt(v, 16) * 0.55).toString(16).padStart(2, '0'); return '#' + f(m[1]) + f(m[2]) + f(m[3]); }
+
+  // ---------- interaction ----------
+  let drag = null;
+  cv.addEventListener('mousemove', e => {
+    const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    if (drag && geo) { const dy = py - drag.py; st.pan[st.sym] = drag.pan + dy / geo.ph * 2 * geo.hd; draw(); return; }
+    st.hover = { px, py }; draw(); tip(px, py);
+  });
+  cv.addEventListener('mouseleave', () => { st.hover = null; $('tip').style.display = 'none'; draw(); });
+  cv.addEventListener('mousedown', e => { if (!geo) return; const r = cv.getBoundingClientRect(); drag = { py: e.clientY - r.top, pan: st.pan[st.sym] || 0 }; cv.style.cursor = 'grabbing'; });
+  window.addEventListener('mouseup', () => { drag = null; cv.style.cursor = 'crosshair'; });
+  cv.addEventListener('dblclick', () => { delete st.pan[st.sym]; delete st.half[st.sym]; draw(); });
+  cv.addEventListener('wheel', e => { const c = cur(); if (!c) return; e.preventDefault(); const def = c.spot * (st.sym === 'GLD' ? 0.035 : 0.0105); const h = st.half[st.sym] || def; st.half[st.sym] = Math.min(c.spot * 0.15, Math.max(c.spot * 0.001, h * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); draw(); }, { passive: false });
+  function tip(px, py) {
+    const t = $('tip'); if (!geo || !geo.bars || !geo.bars.length) { t.style.display = 'none'; return; }
+    const v = geo.yInv(py); let best = null; for (const b of geo.bars) { const d = Math.abs(conv(b.K) - v); if (!best || d < best.d) best = { b, d }; }
+    if (!best || Math.abs(geo.y(conv(best.b.K)) - py) > 10) { t.style.display = 'none'; return; }
+    const b = best.b; let body;
+    if (geo.mode === 'profile') body = `calls  +${fmt(b.cl, 0)} / ${fmt(b.cs, 0)}<br>puts   +${fmt(b.pl, 0)} / ${fmt(b.ps, 0)}`;
+    else if (geo.mode === 'classic') { const r = GM.classic(cur(), st.cScope).strikes.find(s => s.K === b.K) || {}; body = `vol gex ${fmt((r.vol || 0) / 1e9, 4)}Bn<br>oi  gex ${fmt((r.oi || 0) / 1e9, 4)}Bn`; }
+    else body = `${fmt(b.v / geo.scaleDiv, 4)} ${geo.unit}`;
+    t.innerHTML = `<b>${fmt(conv(b.K), 2)}</b> <span style="color:var(--muted)">(${st.sym} ${b.K})</span><br>${body}`;
+    t.style.display = 'block'; const r = $('chartWrap').getBoundingClientRect();
+    t.style.left = Math.min(px + 14, r.width - t.offsetWidth - 8) + 'px'; t.style.top = Math.max(4, py - t.offsetHeight - 8) + 'px';
+  }
+  window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if (e.key === 'ArrowLeft') step(-1); else if (e.key === 'ArrowRight') step(1); else if (e.key === ' ') { e.preventDefault(); togglePlay(); } });
+  new ResizeObserver(() => { resize(); draw(); }).observe($('chartWrap'));
+  $('ivSel').addEventListener('change', e => { st.iv = +e.target.value; draw(); });
+  $('fsBtn').addEventListener('click', () => { const el = document.documentElement; if (document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen && el.requestFullscreen(); });
+  $('snapBtn').addEventListener('click', () => { const a = document.createElement('a'); const c = cur(); a.download = `gexterm_${st.view}_${st.sym || 'chart'}_${c ? GM.prep(c).day : ''}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
+
+  // ---------- levels page ----------
+  function renderLevels() {
+    const syms = Object.keys(st.store), el = $('levels');
+    if (!syms.length) { el.innerHTML = `<h2>Levels</h2><div class="sub">No data yet. Load today's SPX, NDX and GLD files together.</div>`; return; }
+    const saveSym = st.sym, saveIdx = st.idx;
+    let h = `<h2>Levels</h2><div class="sub">Naive GEX (calls +, puts −), converted to futures with each file's futures price. Call wall = major positive, put wall = major negative. Cboe data is ~15 min delayed.</div><div class="lvgrid">`;
+    for (const s of syms) {
+      st.sym = s; const a = st.store[s]; st.idx = s === saveSym ? saveIdx : a.length - 1; const c = a[st.idx];
+      const f = futInfo(s), lab = st.useFut && f ? f.fut : s;
+      const rows = [['90d', 'full'], ['latest', 'zero'], ['next', 'one']].map(([n, sc]) => [n, GM.classic(c, sc)]);
+      const cell = v => v == null ? '–' : `${fmt(conv(v), 2)}<small>${s} ${fmt(v, s === 'GLD' ? 2 : 0)}</small>`;
+      const full = rows[0][1], z = full.oi.zero, reg = z == null ? '' : c.spot >= z ? `<span class="c-gr">above zero gamma → positive gamma (mean-reverting)</span>` : `<span class="c-rd">below zero gamma → negative gamma (trending)</span>`;
+      h += `<div class="lvc"><h4>${tickerLabel(s)} <span>${lab} ${fmt(conv(c.spot), 2)}</span></h4><div class="meta">${etDate(c.asOf)} ${etTime(c.asOf)} ET · ${f ? (f.useRatio ? `×${f.ratio.toFixed(4)}` : `basis ${f.basis >= 0 ? '+' : ''}${f.basis.toFixed(2)}`) + ` (${f.src})` : 'no futures price in file'}</div>
+        <table><tr><th></th><th>call wall</th><th>put wall</th><th>zero γ</th><th>net gex</th></tr>
+        ${rows.map(([n, r]) => `<tr><td>${n}${n !== '90d' ? `<small>${mmdd(r.exps[n === 'latest' ? 0 : 1])}</small>` : '<small>OI</small>'}</td><td class="c-gr">${cell(r.oi.pos)}</td><td class="c-rd">${cell(r.oi.neg)}</td><td class="c-or">${cell(r.oi.zero)}</td><td class="${r.netOI < 0 ? 'c-rd' : 'c-gr'}">${fmt(r.netOI / 1e9, 2)}Bn</td></tr>`).join('')}
+        </table><div class="reg">${reg}</div><button class="open" data-open="${s}">open in classic →</button></div>`;
+    }
+    st.sym = saveSym; st.idx = saveIdx;
+    el.innerHTML = h + '</div>';
+    el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { st.sym = b.dataset.open; st.idx = st.store[st.sym].length - 1; selectView('classic'); }));
+  }
+
+  // ---------- modals ----------
+  function modal(html) { $('modalBox').innerHTML = `<button class="x" onclick="document.getElementById('modal').style.display='none'">×</button>` + html; $('modal').style.display = 'flex'; }
+  $('modal').addEventListener('click', e => { if (e.target.id === 'modal') $('modal').style.display = 'none'; });
+  function showHelp() {
+    modal(`<h3>How this terminal works</h3>
+    <p class="mu">A free rebuild of GexBot's Classic and State views from Cboe's delayed option chains (about 15 minutes late).</p>
+    <h4>classic</h4><p>Naive GEX per strike: <code>Γ × contracts × 100 × spot² × 1%</code>, calls positive and puts negative, in $Bn per 1% move. Bright bars use today's <b>volume</b>; the faint wide bars behind them use <b>open interest</b>. Left-side labels are the volume majors, right-side labels the open-interest majors. <b>Zero gamma</b> is GexBot's method: a cubic spline through the per-strike GEX, zero crossing between the two majors nearest spot. <b>Max change</b> is the strike whose volume GEX changed most over the last 1–30 minutes; the coloured dots on the bars show where each bar was 1/5/10/15/30 minutes ago.</p>
+    <h4>state</h4><p>GexBot classifies every option trade as taker-long or taker-short from tick data. Cboe's free data has no trade tape, so this uses a <b>proxy</b>: each snapshot's new volume is split by where that contract's last trade sits between bid and ask (at the ask = bought, at the bid = sold). It is cumulative through the session, so it gets better with more live snapshots.</p>
+    <ul><li><b>options profile</b> (no toggle): taker long (right) and short (left) contracts — calls orange, puts purple.</li>
+    <li><b>delta</b> (DEX): taker net × Δ × 100 × spot.</li><li><b>gamma</b> (convexity): taker net × Γ × 100 × spot² × 1% — cyan long gamma, purple short gamma.</li>
+    <li><b>vanna</b> (−vanna ex): taker net × vanna × (−IV) × 100 × spot — the delta change if IV collapsed to zero.</li><li><b>charm</b> ex: taker net × charm × 100 × spot ÷ 8,760 — delta drift per hour.</li>
+    <li><b>gex profile</b>: |call imbalance GEX| − |put imbalance GEX| per strike.</li></ul>
+    <p>Red/green dots are the 0DTE put/call implied volatilities (orange axis at the bottom). Dashed ±1σ lines are the expected move: <code>spot × ATM IV × √(time to 4pm ÷ 365)</code>, ATM IV smoothed 50/25/25 over three strikes.</p>
+    <h4>futures</h4><p>Index levels convert with an additive basis (ES, NQ); GLD converts to GC by ratio. The futures price comes from the file (matched to the moment of the data). Type a live futures price in the sidebar to re-anchor it.</p>
+    <h4>controls</h4><p>Scroll to zoom the price axis, drag to pan, double-click to reset. ← → step through snapshots, space plays.</p>
+    <p class="mu">Not financial advice. Dealer-positioning models are estimates.</p>`);
+  }
+  function showSettings() {
+    const s = st.set; const sel = (k, opts) => `<select data-set="${k}">${opts.map(([v, t]) => `<option value="${v}" ${s[k] === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+    const chk = k => `<input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''}>`;
+    modal(`<h3>Chart settings</h3>
+      <div class="setrow">classic bars ${sel('bars', [['vol', 'volume (OI faint behind)'], ['oi', 'open interest']])}</div>
+      <div class="setrow">show OI bars behind volume ${chk('showOI')}</div>
+      <div class="setrow">lookback dots ${chk('dots')}</div>
+      <div class="setrow">spot chart ${sel('chart', [['candles', 'candles'], ['line', 'line']])}</div>
+      <div class="setrow">profile alignment ${sel('align', [['center', 'center'], ['left', 'left'], ['right', 'right']])}</div>
+      <div class="setrow">cursor crosshair ${chk('cross')}</div>
+      <div class="setrow">state: 0DTE skew dots ${chk('skewDots')}</div>
+      <div class="setrow">state: expected move ±1σ ${chk('em')}</div>`);
+    document.querySelectorAll('[data-set]').forEach(el => el.addEventListener('change', () => { const k = el.dataset.set; s[k] = el.type === 'checkbox' ? el.checked : el.value; saveSet(); renderSide(); draw(); }));
+  }
+  function showLive() {
+    modal(`<h3>Live link (intraday candles, max change, state flow)</h3>
+      <p>Cboe's data can only be read from a cboe.com page, so a bookmark button does the fetching and sends each snapshot here every minute.</p>
+      <ol><li>Drag this button to your bookmarks bar: <a class="bm" id="bmLink">GEX live link</a></li>
+      <li>Open <a href="https://www.cboe.com/delayed_quotes/spx/quote_table" target="_blank" rel="noopener">cboe.com/delayed_quotes/spx</a> and click the bookmark.</li>
+      <li>It opens this terminal in a new tab and streams SPX, NDX and GLD into it (≈15-min delayed). Keep the Cboe tab open.</li></ol>
+      <p class="mu">Snapshots are saved in this browser, so a reload keeps the session. The green dot next to “live link” shows data is arriving. The futures conversion uses today's daily file; load it first (or type the futures price in the sidebar).</p>
+      <p class="mu">Status: ${st.live.on ? '<span class="c-gr">receiving</span>' : 'not connected'}.</p>`);
+    $('bmLink').setAttribute('href', BOOKMARKLET);
+    $('bmLink').addEventListener('click', e => { e.preventDefault(); toast('Drag the button to your bookmarks bar, then click it on a cboe.com page.'); });
+  }
+
+  // ---------- demo session (synthetic NDX, every minute 9:30–11:30) ----------
+  function demo() {
+    stopPlay(); st.store = {}; st.sym = null; st.idx = 0;
+    const now = Date.now(); let day = GM.etDay(now);
+    const d = new Date(day + 'T12:00:00Z'); while ([0, 6].includes(d.getUTCDay())) d.setUTCDate(d.getUTCDate() - 1); day = d.toISOString().slice(0, 10);
+    const add = n => { const x = new Date(day + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); while ([0, 6].includes(x.getUTCDay())) x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
+    const exps = [day, add(1), add(7), add(28), add(60)];
+    let rnd = 7; const R = () => (rnd = (rnd * 16807) % 2147483647) / 2147483647;
+    const S0 = 25000, ks = []; for (let K = 23500; K <= 26500; K += 25) ks.push(K);
+    const walls = { 25300: 3, 24800: 2.5, 25500: 2, 24500: 2.2, 25100: 1.6 };
+    const base = []; for (const [ei, e] of exps.entries()) for (const K of ks) for (const t of ['C', 'P']) {
+      const m = Math.log(K / S0); const oi = Math.round((ei === 0 ? 400 : 900) * Math.exp(-m * m / 0.0008) * (walls[K] || 1) * (0.5 + R()) * (t === 'P' && K < S0 ? 1.4 : 1));
+      base.push({ e, ei, K, t, oi, ivb: 0.17 + 0.25 * m * m * 100 - 0.25 * m + (ei === 0 ? 0.04 : 0) });
+    }
+    let spot = S0; const vol = new Map(); const pressure = K => K === 25300 ? 0.8 : K === 24800 ? 0.25 : 0.5;
+    for (let mnt = 0; mnt <= 120; mnt++) {
+      const asOf = etClockMs(day, 9, 30) + mnt * 60000; spot += (R() - 0.48) * 14 + (25150 - spot) * 0.01;
+      const rows = [];
+      for (const b of base) {
+        const T = Math.max((GEX.expiryMs(b.e) - asOf) / (365 * 864e5), 1e-5), iv = b.ivb, g = GM.greeks(spot, b.K, T, iv, 0.04, 0.007, b.t);
+        const k = b.e + b.t + b.K, prevV = vol.get(k) || 0, act = Math.exp(-Math.pow(Math.log(b.K / spot), 2) / 0.00006) * (b.ei === 0 ? 30 : b.ei === 1 ? 8 : 2);
+        const v = prevV + Math.round(act * R() * 3); vol.set(k, v);
+        const sd = iv * Math.sqrt(T), d1 = (Math.log(spot / b.K) + 0.5 * sd * sd) / sd, price = Math.max(0.05, (b.t === 'C' ? 1 : -1) * (spot * (0.5 * (1 + Math.tanh(d1 * 0.8))) - b.K * (0.5 * (1 + Math.tanh((d1 - sd) * 0.8)))) || 0.05);
+        const sp = Math.max(0.1, price * 0.02), bid = Math.max(0, price - sp / 2), ask = price + sp / 2, pr = pressure(b.K) * (b.t === 'P' ? 1.1 : 1);
+        const last = R() < pr ? ask - sp * 0.1 * R() : bid + sp * 0.1 * R();
+        rows.push({ root: 'NDX', exp: b.e, type: b.t, K: b.K, oi: b.oi, vol: v, iv, gamma: g.g, delta: g.d, bid, ask, last });
+      }
+      addSnap({ symbol: 'NDX', spot, prevClose: S0, asOf, rows, futures: { symbol: 'NQ', price: spot + 112.5, note: 'demo' } });
+    }
+    setSym('NDX'); toast('Demo: a synthetic NDX morning, one snapshot per minute. Press ▶ to replay.');
+  }
+
+  // ---------- wiring ----------
+  document.querySelectorAll('#nav a').forEach(a => a.addEventListener('click', () => selectView(a.dataset.v)));
+  $('filesBtn').onclick = $('emptyFiles').onclick = () => $('fileIn').click();
+  $('fileIn').addEventListener('change', e => { ingestFiles([...e.target.files]); e.target.value = ''; });
+  $('demoBtn').onclick = $('emptyDemo').onclick = demo;
+  $('liveBtn').onclick = $('emptyLive').onclick = showLive;
+  $('helpBtn').onclick = showHelp;
+  $('themeBtn').onclick = () => { document.documentElement.classList.toggle('light'); try { localStorage.setItem('gexterm.theme', document.documentElement.classList.contains('light') ? 'light' : 'dark'); } catch (e) {} draw(); };
+  try { if (localStorage.getItem('gexterm.theme') === 'light') document.documentElement.classList.add('light'); } catch (e) {}
+  let dragN = 0;
+  window.addEventListener('dragenter', e => { e.preventDefault(); dragN++; $('drop').style.display = 'flex'; });
+  window.addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; $('drop').style.display = 'none'; } });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('drop').style.display = 'none'; if (e.dataTransfer.files.length) ingestFiles([...e.dataTransfer.files]); });
+  renderSide(); resize(); draw();
+  idbRestore().then(n => { if (n && !st.sym) { setSym(Object.keys(st.store)[0]); toast(`Restored ${n} live snapshot(s) from this browser.`); } });
+  if (location.hash === '#live') toast('Live link connected: waiting for the first snapshot (≈5 s)…', 6000);
+  window.__gexterm = { st, addSnap, setSym, draw, demo, selectView };
 })();
-
 </script>
 </body>
 </html>
