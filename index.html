@@ -85,6 +85,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .kv span:first-child{color:var(--text);padding-left:6px}
 .kv span:last-child{font-family:var(--mono);font-size:11px}
 .c-or{color:var(--orange)!important}.c-gr{color:var(--green)!important}.c-rd{color:var(--red)!important}.c-cy{color:var(--cyan)!important}.c-pu{color:var(--purple)!important}.c-mu{color:var(--muted)!important}
+.c-bl{color:#5a7bf0!important}
 .c-w1{color:#e8e8ec!important}.c-w5{color:#46c6e0!important}.c-w10{color:#5a9cf0!important}.c-w15{color:#5560d8!important}.c-w30{color:#4a3fb0!important}
 :root.light .c-w1{color:#555!important}
 .opgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
@@ -804,6 +805,7 @@ GM.zones = function (snap, ei) {
     return null;
   };
   const c25 = cross(calls.filter(c => c.K >= S * 0.98), 0.25), p25 = cross(puts.filter(c => c.K <= S * 1.02), -0.25);
+  const c50 = cross(calls, 0.5) || cross(puts, -0.5); // 50-delta (ATM by delta) strike
   let atm = cs[0]; for (const c of cs) if (Math.abs(c.K - S) < Math.abs(atm.K - S)) atm = c;
   const atmIv = (() => { const v = cs.filter(c => c.K === atm.K).map(c => c.iv); return v.reduce((a, b) => a + b, 0) / v.length; })();
   // volume / OI traded around each 25-delta strike (where the buyers actually are)
@@ -816,7 +818,7 @@ GM.zones = function (snap, ei) {
     if (p25) { const g = GM.greeks(x, p25.K, T, p25.iv, R, q, 'P'); o.dp = -g.d * 100; o.gp = g.g; }
     curve.push(o);
   }
-  return { S, T, exp, ei, c25, p25, atm: atm.K, atmIv, curve, flowC: near(c25, 'C'), flowP: near(p25, 'P') };
+  return { S, T, exp, ei, c25, p25, c50, atm: atm.K, atmIv, curve, flowC: near(c25, 'C'), flowP: near(p25, 'P') };
 };
 </script>
 <script>// ===== GEX terminal UI (GexBot-style classic + state + levels) =====
@@ -1007,7 +1009,7 @@ GM.zones = function (snap, ei) {
       h += `<div class="seg"><button data-ze="0" class="${!st.zExp ? 'on' : ''}">latest (${mmdd(exps[0])})</button><button data-ze="1" class="${st.zExp === 1 ? 'on' : ''}">next (${mmdd(exps[1])})</button></div>`;
       h += updateBlock(c);
       if (z) {
-        h += `<div class="sec">profit-taking levels</div>` + kv('upside · 25Δ call', z.c25 ? F(z.c25.K) : '–', 'c-cy') + kv('downside · 25Δ put', z.p25 ? F(z.p25.K) : '–', 'c-pu') + kv('ATM (50Δ)', F(z.atm)) + kv('ATM IV', fmt(z.atmIv * 100, 1) + '%');
+        h += `<div class="sec">profit-taking levels</div>` + kv('upside · 25Δ call', z.c25 ? F(z.c25.K) : '–', 'c-cy') + kv('downside · 25Δ put', z.p25 ? F(z.p25.K) : '–', 'c-pu') + kv('50Δ strike (ATM)', z.c50 ? F(z.c50.K) : F(z.atm), 'c-bl') + kv('ATM IV', fmt(z.atmIv * 100, 1) + '%');
         const a = GM.analysis(snaps(), st.idx, st.zExp === 1 ? 'one' : 'zero'), L = a.L;
         const conf = (k, lv, nm) => k && lv != null ? `${nm} ${F(lv)} is ${pts(lv - k.K)} pts ${lv >= k.K ? 'above' : 'below'}` : '';
         h += `<div class="sec">vs major gamma</div><div class="note" style="margin-top:4px">${[conf(z.c25, L.pos, 'Ceiling'), conf(z.p25, L.neg, 'Floor')].filter(Boolean).join('<br>') || '–'}</div>`;
@@ -1394,7 +1396,7 @@ GM.zones = function (snap, ei) {
     add(z0.oi.pos, `Call wall 0DTE ${mmdd(z0.exps[0])}`, '#8fe08f', 2, 1, 'today\'s expiry ceiling');
     add(z0.oi.neg, `Put wall 0DTE ${mmdd(z0.exps[0])}`, '#f08a8c', 2, 1, 'today\'s expiry floor');
     if (z0.hasVol) { add(z0.vol.pos, 'Vol ceiling 0DTE', '#5fd35f', 1, 2, 'today\'s traded major positive'); add(z0.vol.neg, 'Vol floor 0DTE', '#ff5a5f', 1, 2, 'today\'s traded major negative'); add(z0.vol.zero, 'Vol zero γ 0DTE', '#ffc04d', 1, 1, 'live battleground'); }
-    const zz = GM.zones(c, 0); if (zz) { if (zz.c25) add(zz.c25.K, `25Δ call ${mmdd(zz.exp)} · profit-take`, '#2fe0e6', 2, 1, 'call buyers book profit'); if (zz.p25) add(zz.p25.K, `25Δ put ${mmdd(zz.exp)} · profit-take`, '#c77dff', 2, 1, 'put buyers book profit'); }
+    const zz = GM.zones(c, 0); if (zz) { if (zz.c25) add(zz.c25.K, `25Δ call ${mmdd(zz.exp)} · profit-take`, '#2fe0e6', 2, 1, 'call buyers book profit'); if (zz.p25) add(zz.p25.K, `25Δ put ${mmdd(zz.exp)} · profit-take`, '#c77dff', 2, 1, 'put buyers book profit'); if (zz.c50) add(zz.c50.K, `50Δ ATM ${mmdd(zz.exp)}`, '#5a7bf0', 2, 1, 'at-the-money strike'); }
     if (k.em) { add(c.spot + k.em.move, '+1σ', '#8b8b96', 3, 1, 'expected move'); add(c.spot - k.em.move, '−1σ', '#8b8b96', 3, 1, 'expected move'); }
     return out;
   }
@@ -1530,6 +1532,7 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
       <div class="zcards">
         ${z.c25 ? `<div class="zc"><div class="c-cy zt">Upside profit-taking · ${F(z.c25.K)}</div>25Δ call of the ${mmdd(z.exp)} expiry (${st.sym} ${fmt(z.c25.K, 2)}, IV ${fmt(z.c25.iv * 100, 1)}%). It is ${pts(z.c25.K - z.S)} pts above spot. Call buyers' gamma peaks there, so expect profit-taking into it: a ceiling or target. Traded nearby: ${fmt(z.flowC.vol, 0)} contracts today (OI ${fmt(z.flowC.oi, 0)}).</div>` : ''}
         ${z.p25 ? `<div class="zc"><div class="c-pu zt">Downside profit-taking · ${F(z.p25.K)}</div>25Δ put of the ${mmdd(z.exp)} expiry (${st.sym} ${fmt(z.p25.K, 2)}, IV ${fmt(z.p25.iv * 100, 1)}%). It is ${pts(z.S - z.p25.K)} pts below spot. Put buyers book profit as price reaches it, the dealer buys back his short futures hedge, and price tends to bounce: a floor or target. Traded nearby: ${fmt(z.flowP.vol, 0)} contracts today (OI ${fmt(z.flowP.oi, 0)}).</div>` : ''}
+        ${z.c50 ? `<div class="zc" style="grid-column:1/-1"><div class="zt" style="color:#5a7bf0">50Δ strike (ATM) · ${F(z.c50.K)}</div>Where today's options are exactly at the money (call delta 50, ${st.sym} ${fmt(z.c50.K, 2)}). This is the point the 25Δ options are racing toward: each 25Δ option becomes 50Δ when price reaches its own strike. Near this strike both sides' gamma is high, so price tends to chop or pin here into the close.</div>` : ''}
       </div>`;
     const xs = z.curve.map(p => conv(p.P)), Sd = conv(z.S);
     const dC = z.curve.map(p => p.dc ?? null), dP = z.curve.map(p => p.dp ?? null);
@@ -1540,9 +1543,11 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     const vl = [{ x: Sd, c: css('--axis'), lab: `spot ${fmt(Sd, 2)}` }];
     if (z.c25) vl.push({ x: conv(z.c25.K), c: cyan, lab: `25Δ call ${fmt(conv(z.c25.K), 2)}`, top: 14 });
     if (z.p25) vl.push({ x: conv(z.p25.K), c: pur, lab: `25Δ put ${fmt(conv(z.p25.K), 2)}`, top: 28 });
+    if (z.c50) vl.push({ x: conv(z.c50.K), c: '#5a7bf0', lab: `50Δ ATM ${fmt(conv(z.c50.K), 2)}`, top: 42 });
     const marksD = [], marksG = [];
     if (z.c25) { marksD.push({ x: Sd, y: at(dC, Sd), c: '#e5383b', lab: '25Δ now' }, { x: conv(z.c25.K), y: at(dC, conv(z.c25.K)), c: cyan, lab: '≈50Δ: profit-taking' }); marksG.push({ x: conv(z.c25.K), y: at(gC, conv(z.c25.K)), c: cyan, lab: 'gamma peak: take profit' }); }
     if (z.p25) { marksD.push({ x: conv(z.p25.K), y: at(dP, conv(z.p25.K)), c: pur, lab: 'take profit ≈50Δ', left: true }); marksG.push({ x: conv(z.p25.K), y: at(gP, conv(z.p25.K)), c: pur, lab: 'gamma peak: take profit', left: true }); }
+    if (z.c50) { const x50 = conv(z.c50.K); marksD.push({ x: x50, y: 50, c: '#5a7bf0', lab: '50Δ ATM strike' }); }
     const draw2 = () => {
       lineChart($('zDelta'), { title: 'Delta progression of the 25Δ options as price moves', xlab: `${lab} price`, ylab: 'Delta (%)', xs, y0: 0, y1: 100, series: [{ ys: dC, c: gold }, { ys: dP, c: '#ff7a59' }], vlines: vl, hlines: [{ y: 25, c: '#e5383b' }, { y: 50, c: '#5a7bf0' }], marks: marksD, legend: [{ c: gold, t: '25Δ call delta (price ↑)' }, { c: '#ff7a59', t: '25Δ put |delta| (price ↓)' }, { c: '#e5383b', t: '25 delta level' }, { c: '#5a7bf0', t: '50 delta (ATM) level' }] });
       lineChart($('zGamma'), { title: 'Gamma profile: where profit-taking happens', xlab: `${lab} price`, ylab: 'Gamma (relative, peak = 10)', xs, y0: 0, y1: 10.8, series: [{ ys: gC, c: cyan }, { ys: gP, c: pur }], vlines: vl, marks: marksG, yfmt: v => v.toFixed(0), legend: [{ c: cyan, t: '25Δ call gamma' }, { c: pur, t: '25Δ put gamma' }] });
