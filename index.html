@@ -113,16 +113,19 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
 .play .r2 button{background:none;border:0;font-size:12px;padding:2px 4px;color:var(--text)}
 .note{font-size:10.5px;color:var(--muted);line-height:1.45;margin-top:12px}
 /* levels view */
-#levels{position:absolute;inset:0;overflow:auto;padding:22px 26px;display:none}
+#levels{position:absolute;inset:0;overflow:auto;padding:16px 18px;display:none}
+.lvsyms{display:flex;gap:6px;margin:0 0 12px}
+.lvsyms button{background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:12px;color:var(--muted)}
+.lvsyms button.on{color:var(--text);background:var(--btnOn)}
 #levels h2{margin:0 0 4px;font-size:17px;font-weight:600}
 #levels .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
-.lvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:16px}
-.tvc{height:330px;margin:0 0 8px;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.lvgrid{display:grid;grid-template-columns:1fr;gap:18px}
+.tvc{height:calc(100vh - 230px);min-height:420px;margin:0 0 8px;border:1px solid var(--line);border-radius:7px;overflow:hidden}
 .tvtabs{display:flex;gap:4px;margin-top:4px}
 .tvtabs button{background:none;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;padding:4px 10px;font-size:11px;color:var(--muted)}
 .tvtabs button.on{color:var(--text);background:var(--panel2)}
 .tvc{position:relative}
-.tvlive{height:420px!important}
+.tvlive{height:calc(100vh - 230px)!important;min-height:420px}
 .tvnote{position:absolute;left:10px;top:8px;right:80px;z-index:3;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;line-height:1.4}
 .tvbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .tvbar .open{margin-top:0;text-decoration:none;color:var(--text);display:inline-block}
@@ -1358,7 +1361,7 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     const syms = Object.keys(st.store), el = $('levels');
     if (!syms.length) { el.innerHTML = `<h2>Levels</h2><div class="sub">No data yet. Load today's SPX, NDX and GLD files together.</div>`; return; }
     const saveSym = st.sym, saveIdx = st.idx, jobs = [];
-    let h = `<h2>Levels</h2><div class="sub">Naive GEX (calls +, puts −) in futures terms, drawn on a TradingView chart of Cboe's 1-minute candles (converted with the file's futures price). Use <b>Copy TradingView script</b> to put the same lines on your own ES1! / NQ1! / GC1! chart. Cboe data is ~15 min delayed.</div><div class="lvgrid">`;
+    let h = `<h2>Levels</h2><div class="sub">Naive GEX (calls +, puts −) in futures terms, drawn on a TradingView chart of Cboe's 1-minute candles (converted with the file's futures price). Use <b>Copy TradingView script</b> to put the same lines on your own ES1! / NQ1! / GC1! chart. Cboe data is ~15 min delayed.</div><div class="lvsyms">${syms.map((s, n) => `<button data-jump="${n}">${tickerLabel(s)}</button>`).join('')}</div><div class="lvgrid">`;
     syms.forEach((s, n) => {
       st.sym = s; const a = st.store[s]; st.idx = s === saveSym ? saveIdx : a.length - 1; const c = a[st.idx];
       const f = futInfo(s), lab = st.useFut && f ? f.fut : s;
@@ -1367,7 +1370,7 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
       const full = rows[0][1], z = full.oi.zero, reg = z == null ? '' : c.spot >= z ? `<span class="c-gr">above zero gamma → positive gamma (mean-reverting)</span>` : `<span class="c-rd">below zero gamma → negative gamma (trending)</span>`;
       const lv = levelSet(s, c), candles = candlesFor(s, null, null), cday = candles.length ? GM.etDay(candles[candles.length - 1].t) : null;
       const tv = TV_SYM[lab] || TV_SYM[s];
-      h += `<div class="lvc"><h4>${tickerLabel(s)} <span>${lab} ${fmt(conv(c.spot), 2)}</span></h4><div class="meta">${etDate(c.asOf)} ${etTime(c.asOf)} ET · ${f ? (f.useRatio ? `×${f.ratio.toFixed(4)}` : `basis ${f.basis >= 0 ? '+' : ''}${f.basis.toFixed(2)}`) + ` (${f.src})` : 'no futures price in file'}${cday ? ` · candles ${cday.slice(5).replace('-', '/')}${cday !== GM.prep(c).day ? ' (previous session)' : ''}` : ' · no candles in file (spot points only)'}</div>
+      h += `<div class="lvc" id="lvc${n}"><h4>${tickerLabel(s)} <span>${lab} ${fmt(conv(c.spot), 2)}</span></h4><div class="meta">${etDate(c.asOf)} ${etTime(c.asOf)} ET · ${f ? (f.useRatio ? `×${f.ratio.toFixed(4)}` : `basis ${f.basis >= 0 ? '+' : ''}${f.basis.toFixed(2)}`) + ` (${f.src})` : 'no futures price in file'}${cday ? ` · candles ${cday.slice(5).replace('-', '/')}${cday !== GM.prep(c).day ? ' (previous session)' : ''}` : ' · no candles in file (spot points only)'}</div>
         <div class="tvtabs"><button class="on" data-tvt="lv" data-n="${n}">Levels chart</button>${tv ? `<button data-tvt="live" data-n="${n}" data-sym="${tv}">Live TradingView</button>` : ''}</div>
         <div class="tvc" id="tvc${n}"></div>${candles.length ? '' : `<div class="meta c-or" style="margin:-4px 0 8px">No candles in this file yet, so the chart shows the levels around spot. Newer files (and the live link) include Cboe candles. The Live TradingView tab shows the real chart now.</div>`}
         <div class="tvc tvlive" id="tvl${n}" style="display:none"></div>
@@ -1406,6 +1409,7 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     }
     st.sym = saveSym; st.idx = saveIdx;
     el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { st.sym = b.dataset.open; st.idx = st.store[st.sym].length - 1; selectView('classic'); }));
+    el.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => $('lvc' + b.dataset.jump).scrollIntoView({ behavior: 'smooth', block: 'start' })));
     el.querySelectorAll('[data-tvt]').forEach(b => b.addEventListener('click', () => {
       const n = b.dataset.n, live = b.dataset.tvt === 'live';
       b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
