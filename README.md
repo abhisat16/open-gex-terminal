@@ -7,12 +7,15 @@ A free, GexBot-style options positioning terminal (Classic + State views), compu
 ## Views
 - **classic**: naive GEX ladder by volume (bright bars) and open interest (faint bars) on the same price axis as the spot candles. Major positive / negative levels for volume (left labels) and open interest (right labels), zero gamma (cubic-spline crossing between the majors, GexBot's documented method), net GEX, max-change GEX over 1/5/10/15/30 minutes, lookback dots, history playback. Scopes: 90d (agg), latest (0DTE), next (1DTE).
 - **state**: options profile (taker long/short calls and puts), DEX, convexity (gamma), −vanna ex and charm ex ladders, and the GEX profile (net call vs put imbalance), with 0DTE IV skew dots and the ±1σ expected move.
-- **levels**: call wall, put wall, zero gamma and net GEX for every loaded ticker, in futures terms.
+- **levels**: call wall, put wall, zero gamma and net GEX for every loaded ticker, in futures terms, drawn on a TradingView Lightweight Charts candle chart (Cboe 1-minute candles). **Copy TradingView script** exports the same lines as a Pine Script indicator for your own ES1! / NQ1! / GC1! chart.
+- **Playbook**: hover any line or bar for an explanation; click any price for a full read (nearest levels, strike flow, buy/sell/no-trade zone with a checklist, regime, max change, time to close).
 
 ## Data
 - Daily snapshot files (`SYM_YYYY-MM-DD_gex.csv`, `#GEXSNAP` format) with the matching futures price inside; select several at once.
 - Cboe CSV exports or Cboe JSON.
 - **Live link**: a bookmark button run on a cboe.com page sends a snapshot every minute (SPX, NDX, GLD). Snapshots are kept in the browser (IndexedDB) for the session.
+
+Charts use [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts) (Apache-2.0).
 
 ## Method
 - GEX = Γ × contracts × 100 × S² × 1%, calls positive and puts negative. Γ, Δ, vanna and charm are recomputed with Black–Scholes from Cboe's implied volatility.
