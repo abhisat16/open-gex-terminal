@@ -168,6 +168,7 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
     <div id="wm">gex<br>term<small id="wmv">open</small></div>
     <div id="tools">
       <button id="fsBtn" title="full screen"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 5V1h4M10 1h4v4M14 10v4h-4M5 14H1v-4"/></svg></button>
+      <button id="resetBtn" title="reset zoom (or double-click the chart)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4"/><path d="M2 1.5v3.3h3.3"/></svg></button>
       <button id="snapBtn" title="save chart image"><svg width="16" height="15" viewBox="0 0 16 15" fill="currentColor"><path d="M5.5 1 4.3 2.8H2A1.5 1.5 0 0 0 .5 4.3v8.2A1.5 1.5 0 0 0 2 14h12a1.5 1.5 0 0 0 1.5-1.5V4.3A1.5 1.5 0 0 0 14 2.8h-2.3L10.5 1zM8 4.5a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6zm0 1.6a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"/></svg></button>
       <select id="ivSel" title="candle interval"><option value="1">1m ▾</option><option value="5" selected>5m ▾</option><option value="15">15m ▾</option></select>
     </div>
@@ -545,11 +546,11 @@ const GM = (() => {
       // aggressor proxy: where the last print sits inside the quote (1 = at ask = taker bought, 0 = at bid = taker sold)
       let p = 0.5;
       if (r.ask > 0 && r.ask > r.bid && r.last > 0) p = Math.min(1, Math.max(0, (r.last - r.bid) / (r.ask - r.bid)));
-      cs.push({ key: r.exp + r.type + r.K, exp: r.exp, type: r.type, K: r.K, oi: r.oi, vol: r.vol, iv, T, dte: (ems - asOf) / DAY, ems, p, ...G });
+      cs.push({ key: r.exp + r.type + r.K, exp: r.exp, type: r.type, K: r.K, oi: r.oi, vol: r.vol, iv, T, dte: (ems - asOf) / DAY, ems, p, hq: r.ask > 0 && r.ask > r.bid && r.last > 0, ...G });
     }
     const exps = [...new Set(cs.map(c => c.exp))].sort();
     for (const c of cs) c.ei = exps.indexOf(c.exp);
-    snap._p = { S, asOf, q, exps, cs, day: etDay(asOf) };
+    snap._p = { S, asOf, q, exps, cs, day: etDay(asOf), flow: cs.some(c => c.vol > 0 && c.hq) };
     return snap._p;
   }
   const inScope = (c, scope) => scope === 'zero' ? c.ei === 0 : scope === 'one' ? c.ei === 1 : c.dte <= 90;
@@ -625,7 +626,11 @@ const GM = (() => {
   function state(snaps, i, mode, scope) {
     const s = snaps[i]; s._s = s._s || {}; const ck = mode + scope;
     if (s._s[ck]) return s._s[ck];
-    const P = prep(s), S = P.S, imb = imbalance(snaps, i), unit = S * S * 0.01 * 100;
+    const P = prep(s), S = P.S, unit = S * S * 0.01 * 100;
+    // no classifiable flow in this snapshot (pre-market, or a file without bid/ask/last):
+    // fall back to open interest with the standard customer convention (takers short calls, long puts)
+    const source = P.flow ? 'flow' : 'oi';
+    const imb = P.flow ? imbalance(snaps, i) : new Map(P.cs.map(c => [c.key, c.type === 'C' ? { L: 0, Sh: c.oi } : { L: c.oi, Sh: 0 }]));
     const byK = new Map(); let net = 0;
     for (const c of P.cs) {
       if (!inScope(c, scope)) continue;
@@ -649,7 +654,7 @@ const GM = (() => {
       let L = null, Sh = null; for (const e of near) { const l = e.cl + e.pl, sh = e.cs + e.ps; if (l > 0 && (!L || l > L.x)) L = { K: e.K, x: l }; if (sh < 0 && (!Sh || sh < Sh.x)) Sh = { K: e.K, x: sh }; }
       maj = { pos: L && L.K, neg: Sh && Sh.K };
     } else maj = majorsOf(near, 'v');
-    const res = { S, mode, scope, strikes, net, maj, exps: P.exps };
+    const res = { S, mode, scope, strikes, net, maj, exps: P.exps, source };
     s._s[ck] = res; return res;
   }
 
@@ -874,8 +879,8 @@ if (typeof module !== 'undefined') module.exports = GM;
       const k = c && GM.skew(c);
       if (k && k.em) h += `<div class="sec">expected move (${mmdd(k.em.exp)})</div>` + kv('atm iv', fmt(k.em.iv * 100, 1) + '%') + kv('±1σ', '±' + fmt(st.useFut && futInfo(st.sym) && futInfo(st.sym).useRatio ? k.em.move * futInfo(st.sym).ratio : k.em.move, 2)) + kv('range', `${P(c.spot - k.em.move)} – ${P(c.spot + k.em.move)}`);
       h += playBlock();
-      const anyQuotes = c && c.rows.some(x => x.ask > 0);
-      h += `<div class="note">State uses a <b>classification proxy</b>: each interval's new volume is split taker-long / taker-short by where the contract's last trade sits inside its bid/ask. ${anyQuotes ? '' : '<span class="c-or">This file has no bid/ask/last columns, so flow nets to zero — use the live link or a newer daily file.</span>'}</div>`;
+      if (r && r.source === 'oi') h += `<div class="note"><span class="c-or">Source: open interest.</span> This snapshot has no classified trades yet (pre-market, or a file without bid/ask/last), so the ladders use open interest with the usual customer assumption: takers short calls, long puts. Once volume trades, state switches to classified flow automatically.</div>`;
+      else if (r) h += `<div class="note">Source: classified flow (proxy). Each interval's new volume is split taker-long / taker-short by where the contract's last trade sits inside its bid/ask.</div>`;
     } else {
       h += `<div class="shead"><h3>levels</h3></div><div class="note" style="margin-top:0">Key GEX levels for every loaded ticker, in futures terms. Drop all of today's files at once to fill this page.</div>`;
       h += `<div style="margin-top:14px">${tickerBlock()}</div>` + playBlock();
@@ -1098,6 +1103,7 @@ if (typeof module !== 'undefined') module.exports = GM;
   }
   window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if (e.key === 'ArrowLeft') step(-1); else if (e.key === 'ArrowRight') step(1); else if (e.key === ' ') { e.preventDefault(); togglePlay(); } });
   new ResizeObserver(() => { resize(); draw(); }).observe($('chartWrap'));
+  $('resetBtn').addEventListener('click', () => { delete st.pan[st.sym]; delete st.half[st.sym]; draw(); });
   $('ivSel').addEventListener('change', e => { st.iv = +e.target.value; draw(); });
   $('fsBtn').addEventListener('click', () => { const el = document.documentElement; if (document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen && el.requestFullscreen(); });
   $('snapBtn').addEventListener('click', () => { const a = document.createElement('a'); const c = cur(); a.download = `gexterm_${st.view}_${st.sym || 'chart'}_${c ? GM.prep(c).day : ''}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
