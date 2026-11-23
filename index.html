@@ -141,6 +141,22 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
 .bm{display:inline-block;background:#8ec0f5;color:#0a1526;padding:7px 14px;border-radius:6px;text-decoration:none;font-weight:600;margin:6px 0}
 .setrow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line2);font-size:12.5px}
 .setrow select,.setrow input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px}
+.sig{border:1px solid var(--line);border-radius:7px;padding:7px 8px 8px;margin:10px 0 4px;background:var(--panel2)}
+.sig .kv span:first-child{padding-left:0;color:var(--muted)}
+.sig .kv span:last-child{font-family:var(--sans);font-size:11px;text-align:right;max-width:62%}
+.sig .rule{margin-top:6px;padding-top:6px;border-top:1px solid var(--line);font-size:11.5px;line-height:1.45}
+#tip{white-space:normal!important;max-width:330px;line-height:1.45;font-family:var(--sans)!important;font-size:11.5px!important}
+#tip .tt{font-weight:600;margin-bottom:2px}
+#tip .mono{font-size:11px}
+#sum{position:absolute;left:0;right:0;bottom:0;max-height:46%;overflow:auto;background:var(--panel);border-top:1px solid var(--line);padding:12px 18px 14px;display:none;z-index:4;font-size:12px;line-height:1.5}
+#sum .hd{display:flex;align-items:baseline;gap:12px;margin-bottom:8px}
+#sum .hd b{font-size:15px;font-family:var(--mono)}
+#sum .hd .x{margin-left:auto;background:none;border:0;color:var(--muted);font-size:18px;line-height:1}
+#sum .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px 22px}
+#sum h5{margin:0 0 3px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
+#sum .ck{display:flex;gap:6px}
+#sum .read{border-left:3px solid var(--blue);padding-left:9px}
+#sum .mu{color:var(--muted)}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:12px;display:none;z-index:30;max-width:80vw}
 @media (max-width:820px){#side{width:200px}#nav{gap:12px}#topr .hide-s{display:none}}
 </style>
@@ -173,6 +189,7 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
       <select id="ivSel" title="candle interval"><option value="1">1m ▾</option><option value="5" selected>5m ▾</option><option value="15">15m ▾</option></select>
     </div>
     <div id="tip"></div>
+    <div id="sum"></div>
     <div id="empty">
       <h2>Drop your Cboe snapshot files here</h2>
       <div>SPX, NDX and GLD files from the daily download (<span class="mono">SYM_YYYY-MM-DD_gex.csv</span>), Cboe CSV exports or Cboe JSON.<br>Select several at once. For intraday candles and max-change, use the <b>live link</b>.</div>
@@ -703,6 +720,41 @@ const GM = (() => {
   return { prep, classic, state, skew, maxChange, pastIndex, etDay, etParts, greeks, QDIV, baseSym };
 })();
 if (typeof module !== 'undefined') module.exports = GM;
+
+// ===== Playbook analysis (GexBot Classic as traded by GexFuturesTrading) =====
+GM.history = function (snaps, i, scope, maxPts = 90) {
+  const day = GM.prep(snaps[i]).day; let j = i; while (j > 0 && GM.prep(snaps[j - 1]).day === day) j--;
+  const n = i - j + 1, stride = Math.max(1, Math.ceil(n / maxPts)), out = [];
+  for (let k = i; k >= j; k -= stride) {
+    const r = GM.classic(snaps[k], scope), key = r.hasVol ? 'vol' : 'oi';
+    out.push({ t: snaps[k].asOf, spot: snaps[k].spot, zero: r[key].zero, pos: r[key].pos, neg: r[key].neg });
+  }
+  return out.reverse();
+};
+GM.analysis = function (snaps, i, scope) {
+  const s = snaps[i], P = GM.prep(s), r = GM.classic(s, scope), key = r.hasVol ? 'vol' : 'oi', L = r[key], S = s.spot;
+  const ks = r.strikes.map(x => x.K); let step = Infinity; for (let k = 1; k < ks.length; k++) { const d = ks[k] - ks[k - 1]; if (d > 0 && d < step) step = d; }
+  if (!isFinite(step)) step = S * 0.001;
+  const near = Math.max(step, S * 0.0012);
+  const net = key === 'vol' ? r.netVol : r.netOI;
+  const mc = r.hasVol ? GM.maxChange(snaps, i, scope, 'vol') : [];
+  const mcVals = mc.filter(m => m.K != null && m.v !== 0);
+  const mcBias = !mcVals.length ? 'none' : mcVals.every(m => m.v > 0) ? 'green' : mcVals.every(m => m.v < 0) ? 'red' : 'mixed';
+  const mcShort = mc.filter(m => m.w <= 5 && m.K != null && m.v !== 0); // what is happening right now
+  const turning = !mcShort.length ? 'none' : mcShort.every(m => m.v > 0) ? 'up' : mcShort.every(m => m.v < 0) ? 'down' : 'mixed';
+  // battle (clustering): spot crossing zero gamma / zero gamma jumping around over the last 20 minutes
+  const h = GM.history(snaps, i, scope, 400).filter(x => x.t >= s.asOf - 20 * 60000 && x.zero != null);
+  let crosses = 0; for (let k = 1; k < h.length; k++) if ((h[k].spot >= h[k].zero) !== (h[k - 1].spot >= h[k - 1].zero)) crosses++;
+  const zs = h.map(x => x.zero), zRange = zs.length ? Math.max(...zs) - Math.min(...zs) : 0;
+  const battle = h.length >= 5 && (crosses >= 2 || zRange > Math.max(3 * step, S * 0.003));
+  // did the majors shift in the last ~15 minutes?
+  const j15 = GM.pastIndex(snaps, i, 15); let shift = null;
+  if (j15 >= 0) { const o = GM.classic(snaps[j15], scope)[key]; shift = { neg: o.neg != null && L.neg != null ? L.neg - o.neg : 0, pos: o.pos != null && L.pos != null ? L.pos - o.pos : 0 }; }
+  const close = (() => { const [y, m, d] = P.day.split('-').map(Number); return GEX.etToMs(y, m - 1, d, 16, 0); })();
+  const minsLeft = (close - s.asOf) / 60000;
+  const regime = L.zero == null ? 'unknown' : S >= L.zero ? 'above' : 'below';
+  return { S, key, L, oi: r.oi, vol: r.vol, step, near, net, mc, mcBias, turning, battle, crosses, zRange, shift, minsLeft, regime, hasVol: r.hasVol, scope };
+};
 </script>
 <script>// ===== GEX terminal UI (GexBot-style classic + state + levels) =====
 (() => {
@@ -856,6 +908,7 @@ if (typeof module !== 'undefined') module.exports = GM;
       h += head('classic') + tickerBlock();
       h += `<div class="seg"><button data-cs="full" class="${st.cScope === 'full' ? 'on' : ''}">90d (agg)</button><button data-cs="zero" class="${st.cScope === 'zero' ? 'on' : ''}">latest (${mmdd(exps[0])})</button><button data-cs="one" class="${st.cScope === 'one' ? 'on' : ''}">next (${mmdd(exps[1])})</button></div>`;
       h += updateBlock(c);
+      if (c) h += signalBlock(GM.analysis(snaps(), st.idx, st.cScope));
       h += `<div class="sec">volume</div>` + kv('zero gamma', r ? P(r.vol.zero) : '–', 'c-or', '') + kv('major positive', r ? P(r.vol.pos) : '–', 'c-gr') + kv('major negative', r ? P(r.vol.neg) : '–', 'c-rd') + kv('net gex', r ? fmt(r.netVol / 1e9, 4) : '–', '', r && r.netVol < 0 ? 'c-rd' : 'c-gr');
       h += `<div class="sec">open interest</div>` + kv('zero gamma', r ? P(r.oi.zero) : '–', 'c-or') + kv('major positive', r ? P(r.oi.pos) : '–', 'c-gr') + kv('major negative', r ? P(r.oi.neg) : '–', 'c-rd') + kv('net gex', r ? fmt(r.netOI / 1e9, 4) : '–', '', r && r.netOI < 0 ? 'c-rd' : 'c-gr');
       h += `<div class="sec">max change gex</div>`;
@@ -913,6 +966,104 @@ if (typeof module !== 'undefined') module.exports = GM;
   }
   function stopPlay() { if (st.play) { clearInterval(st.play); st.play = null; } }
 
+  // ---------- playbook: explanations, signal box, click summary ----------
+  const F = x => x == null ? '–' : fmt(conv(x), 2);
+  const pts = d => { const r = st.useFut && futInfo(st.sym) && futInfo(st.sym).useRatio ? futInfo(st.sym).ratio : 1; return fmt(Math.abs(d * r), 2); };
+  const LEVEL_TXT = {
+    volPos: ['Major positive gamma (volume): the ceiling', 'Biggest call-side GEX traded today. Options buyers who rode the move up tend to cash out here: past the 25–50 delta their gains flatten and time decay works against them. When they sell, the dealer unwinds the futures he bought to hedge, so price stalls. Play: sell strength into it or take long profits here. Do not buy into it. Confirmation: max change turning red.'],
+    volNeg: ['Major negative gamma (volume): the floor', 'Biggest put-side GEX traded today. Put holders who rode the move down take profit here, and the dealer buys back the futures he sold to hedge, which absorbs selling. Play: buy weakness with a stop just below, or take short profits here. Confirmation: max change turning green. Best before ~3 pm ET.'],
+    oiPos: ['Call wall (open interest)', 'Largest call-side GEX from positions carried in from earlier sessions. A slower, structural ceiling. Today\'s live fight is in the volume majors.'],
+    oiNeg: ['Put wall (open interest)', 'Largest put-side GEX from positions carried in from earlier sessions. A slower, structural floor. Today\'s live fight is in the volume majors.'],
+    zero: ['Zero gamma: the battleground', 'Where the smoothed (spline) call and put GEX cancel out, like a volume point of control. Above it calls are in control: lean long. Below it puts are in control: lean short. Do not trade at it. Trade the break, with the stop on the other side. If it keeps jumping around, buyers and sellers are still fighting.'],
+    spot: ['Spot', 'Last Cboe price (about 15 minutes delayed), shown in futures terms.'],
+    em: ['±1σ expected move', 'One standard deviation of today\'s expiry: spot × ATM IV × √(time left / 365). Roughly two days in three close inside it.'],
+    stPos: ['Major positive (state)', 'Largest positive bar in this state view.'],
+    stNeg: ['Major negative (state)', 'Largest negative bar in this state view.'],
+    pin: ['Pinned price', 'Click elsewhere to move it, or close the summary.'],
+  };
+  const STATE_TXT = {
+    gexprofile: 'Net of call vs put imbalance GEX. Green (right): call imbalance, upside squeeze risk. Red (left): put imbalance, downside squeeze risk.',
+    profile: 'Taker long (right) and short (left) contracts. Calls orange, puts purple. Long options act like walls (holders take profit into them). Short options carry squeeze risk.',
+    delta: 'Taker delta exposure ($). Positive: takers net long delta here. Negative: net short. Heavy short above spot behaves like a passive seller.',
+    gamma: 'Taker convexity. Cyan: takers long gamma (in falling volatility, price stalls here). Purple: takers short gamma (price can run through; into the close these strikes pin).',
+    vanna: '−Vanna ex: delta change if implied volatility collapsed to zero. Positive supports from below; negative caps from above.',
+    charm: 'Charm ex: delta drift per hour from time decay. Positive adds bids; negative adds offers into the close.',
+  };
+  function signalBlock(a) {
+    if (!a) return '';
+    const reg = a.regime === 'above' ? '<span class="c-gr">above zero γ · calls in control</span>' : a.regime === 'below' ? '<span class="c-rd">below zero γ · puts in control</span>' : '<span class="c-mu">no zero γ</span>';
+    const net = a.net >= 0 ? '<span class="c-gr">positive · leans up</span>' : '<span class="c-rd">negative · leans down</span>';
+    const mcb = { green: '<span class="c-gr">all green · buying</span>', red: '<span class="c-rd">all red · selling</span>', mixed: '<span class="c-or">mixed</span>', none: '<span class="c-mu">needs intraday snapshots</span>' }[a.mcBias];
+    const bat = a.battle ? `<span class="c-or">battle (${a.crosses} crosses) · wait for winner</span>` : '<span class="c-mu">no battle</span>';
+    let shift = '<span class="c-mu">–</span>';
+    if (a.shift) { const p = []; if (a.shift.neg < 0) p.push(`<span class="c-rd">floor moved ${pts(a.shift.neg)} lower: puts added, continuation risk</span>`); if (a.shift.neg > 0) p.push(`<span class="c-gr">floor moved ${pts(a.shift.neg)} higher</span>`); if (a.shift.pos > 0) p.push(`<span class="c-gr">ceiling moved ${pts(a.shift.pos)} higher: calls added</span>`); if (a.shift.pos < 0) p.push(`<span class="c-rd">ceiling moved ${pts(a.shift.pos)} lower</span>`); shift = p.join('<br>') || '<span class="c-mu">steady (15 min)</span>'; }
+    const m = a.minsLeft, tl = m <= 0 ? '<span class="c-mu">after the close</span>' : m > 390 ? '<span class="c-mu">pre-market</span>' : `${Math.floor(m / 60)}h ${Math.round(m % 60)}m to 4 pm` + (m < 60 ? ' <span class="c-or">· 0DTE decay fast, levels weaker</span>' : '');
+    let rule;
+    if (a.regime === 'below' && a.net < 0 && a.mcBias !== 'green') rule = `<b class="c-rd">Short regime.</b> No longs except at the floor ${F(a.L.neg)}. Shorts on retests of zero γ ${F(a.L.zero)}, stop above it.`;
+    else if (a.regime === 'above' && a.net >= 0 && a.mcBias !== 'red') rule = `<b class="c-gr">Long regime.</b> No shorts except at the ceiling ${F(a.L.pos)}. Longs on retests of zero γ ${F(a.L.zero)}, stop below it.`;
+    else rule = `<b class="c-or">Mixed signals.</b> Only trade at the majors: buy ${F(a.L.neg)}, sell ${F(a.L.pos)}.`;
+    if (a.battle) rule = `<b class="c-or">Battle at zero γ.</b> Don't enter during the fight. The side price breaks to is the winner. ` + rule;
+    return `<div class="sig"><div class="kv"><span>regime</span><span>${reg}</span></div><div class="kv"><span>net gex</span><span>${net}</span></div><div class="kv"><span>max change</span><span>${mcb}</span></div><div class="kv"><span>zero γ</span><span>${bat}</span></div><div class="kv"><span>majors</span><span>${shift}</span></div><div class="kv"><span>clock</span><span>${tl}</span></div><div class="rule">${rule}</div></div>`;
+  }
+  function strikeInfo(K) {
+    const c = cur(), r = GM.classic(c, st.cScope), row = r.strikes.find(s => s.K === K) || { vol: 0, oi: 0 }, key = r.hasVol ? 'vol' : 'oi';
+    const ch = [5, 15, 30].map(w => { const j = GM.pastIndex(snaps(), st.idx, w); if (j < 0) return null; const p = GM.classic(snaps()[j], st.cScope).strikes.find(s => s.K === K); return { w, d: row[key] - (p ? p[key] : 0) }; }).filter(Boolean);
+    let trend = '';
+    const c5 = ch.find(x => x.w === 5) || ch[0];
+    if (c5 && Math.abs(c5.d) > Math.abs(row[key]) * 0.03) {
+      const growing = Math.sign(c5.d) === Math.sign(row[key]) || row[key] === 0;
+      trend = growing ? `${row[key] >= 0 ? 'Calls' : 'Puts'} being <b>added</b> here (bar growing).` : `${row[key] >= 0 ? 'Calls' : 'Puts'} being <b>liquidated</b> here (bar shrinking: profit-taking).`;
+    } else if (ch.length) trend = 'Little change in the last few minutes.';
+    return { row, key, ch, trend };
+  }
+  function nearestStrike(price) { const r = GM.classic(cur(), st.cScope); let b = null; for (const s of r.strikes) if (!b || Math.abs(s.K - price) < Math.abs(b.K - price)) b = s; return b && b.K; }
+  function renderSummary() {
+    const el = $('sum'), c = cur();
+    if (st.pin == null || !c || st.view === 'levels') { if (el.style.display === 'block') { el.style.display = 'none'; if (st.view !== 'levels') draw(true); } return; }
+    const price = st.pin, S = c.spot; let h = '';
+    const hd = `<div class="hd"><b>${F(price)}</b><span class="mu">${st.sym} ${fmt(price, 2)} · ${price >= S ? '+' : '−'}${pts(price - S)} pts ${price >= S ? 'above' : 'below'} spot</span><button class="x" id="sumX" title="close">×</button></div>`;
+    if (st.view === 'classic') {
+      const a = GM.analysis(snaps(), st.idx, st.cScope), L = a.L;
+      const lv = [['volPos', L.pos], ['volNeg', L.neg], ['zero', L.zero], ['oiPos', a.oi.pos], ['oiNeg', a.oi.neg]].filter(x => x[1] != null);
+      const hit = lv.filter(x => Math.abs(x[1] - price) <= a.near).sort((p, q) => Math.abs(p[1] - price) - Math.abs(q[1] - price))[0];
+      const above = lv.filter(x => x[1] > price + a.near / 2).sort((p, q) => p[1] - q[1])[0], below = lv.filter(x => x[1] < price - a.near / 2).sort((p, q) => q[1] - p[1])[0];
+      const K = nearestStrike(price), si = K != null ? strikeInfo(K) : null;
+      let where = hit ? `<b>${LEVEL_TXT[hit[0]][0]}</b> (${F(hit[1])}).<br>${LEVEL_TXT[hit[0]][1]}` : `Between levels. Above: ${above ? `${LEVEL_TXT[above[0]][0].split(':')[0]} ${F(above[1])} (+${pts(above[1] - price)})` : 'nothing within range'}. Below: ${below ? `${LEVEL_TXT[below[0]][0].split(':')[0]} ${F(below[1])} (−${pts(price - below[1])})` : 'nothing within range'}.`;
+      const ok = (b, t) => `<div class="ck"><span class="${b ? 'c-gr' : 'c-rd'}">${b ? '✓' : '✗'}</span><span>${t}</span></div>`;
+      let read = '';
+      const zone = hit && hit[0];
+      if (zone === 'volNeg' || zone === 'oiNeg') {
+        read = `<b class="c-gr">Buy zone (floor).</b> Long near ${F(hit[1])}, stop just below (≈${F(hit[1] - a.near)}). Targets: zero γ ${F(L.zero)}, then the ceiling ${F(L.pos)}.`
+          + ok(a.turning === 'up', 'max change turning green (put sellers buying back)') + ok(!(a.shift && a.shift.neg < 0), 'floor has not moved lower in the last 15 min') + ok(a.minsLeft > 60, 'more than an hour before the 0DTE close') + ok(zone === 'volNeg', 'today\'s volume floor (stronger than an OI wall)');
+      } else if (zone === 'volPos' || zone === 'oiPos') {
+        read = `<b class="c-rd">Sell zone (ceiling).</b> Short near ${F(hit[1])}, stop just above (≈${F(hit[1] + a.near)}). Targets: zero γ ${F(L.zero)}, then the floor ${F(L.neg)}.`
+          + ok(a.turning === 'down', 'max change turning red (call buyers selling out)') + ok(!(a.shift && a.shift.pos > 0), 'ceiling has not moved higher in the last 15 min') + ok(a.minsLeft > 60, 'more than an hour before the 0DTE close') + ok(zone === 'volPos', 'today\'s volume ceiling (stronger than an OI wall)');
+      } else if (zone === 'zero') {
+        read = `<b class="c-or">No-trade zone.</b> This is where buyers and sellers fight. Wait for price to leave it. A break and retest from below is a short (stop above ${F(L.zero)}). From above it is a long (stop below).${a.battle ? ' Right now the line is clustering: the fight is still on.' : ''}`;
+      } else {
+        const up = price > (L.zero ?? S);
+        read = up ? `<b>Above zero γ: long side.</b> Middle of the range. Don't chase. Longs on a retest of ${F(L.zero)}, shorts only at the ceiling ${F(L.pos)}.` : `<b>Below zero γ: short side.</b> Middle of the range. Don't chase. Shorts on a retest of ${F(L.zero)}, longs only at the floor ${F(L.neg)}.`;
+      }
+      const chTxt = si && si.ch.length ? si.ch.map(x => `${x.w}m ${x.d >= 0 ? '+' : ''}${fmt(x.d / 1e9, 3)}`).join(' · ') : 'needs intraday snapshots';
+      h = hd + `<div class="cols">
+        <div><h5>What is here</h5>${where}</div>
+        <div><h5>Strike ${K != null ? `${F(K)} (${st.sym} ${fmt(K, st.sym === 'GLD' ? 2 : 0)})` : ''}</h5>${si ? `volume GEX <span class="mono ${si.row.vol < 0 ? 'c-rd' : 'c-gr'}">${fmt(si.row.vol / 1e9, 3)}Bn</span> · OI GEX <span class="mono ${si.row.oi < 0 ? 'c-rd' : 'c-gr'}">${fmt(si.row.oi / 1e9, 3)}Bn</span><br><span class="mu">change:</span> <span class="mono">${chTxt}</span><br>${si.trend}` : '–'}</div>
+        <div class="read"><h5>Playbook read</h5>${read}</div>
+        <div><h5>Context</h5>${signalBlock(a).replace('<div class="sig">', '<div>')}</div></div>
+        <div class="mu" style="margin-top:8px;font-size:10.5px">Rules from the GexBot Classic method: sell the major positive, buy the major negative, zero gamma is the battleground, filter with net GEX and max change, watch the clock. Cboe data is about 15 minutes delayed. Not financial advice.</div>`;
+    } else {
+      const scope = st.sMode === 'gexprofile' ? st.sScope : st.opScope, r = GM.state(snaps(), st.idx, st.sMode, scope);
+      let b = null; for (const s of r.strikes) if (!b || Math.abs(s.K - price) < Math.abs(b.K - price)) b = s;
+      const sc = ['vanna', 'charm'].includes(st.sMode) ? 1e6 : st.sMode === 'profile' ? 1 : 1e9, un = st.sMode === 'charm' ? 'MM/hr' : sc === 1e6 ? 'MM' : sc === 1 ? 'contracts' : 'Bn';
+      const val = b ? (st.sMode === 'profile' ? `calls +${fmt(b.cl, 0)} / ${fmt(b.cs, 0)} · puts +${fmt(b.pl, 0)} / ${fmt(b.ps, 0)}` : `${fmt(b.v / sc, 3)} ${un}`) : '–';
+      h = hd + `<div class="cols"><div><h5>Strike ${b ? F(b.K) : ''}</h5>${val}${b && r.maj.pos === b.K ? '<br><b class="c-cy">Major positive in this view</b>' : ''}${b && r.maj.neg === b.K ? '<br><b class="c-pu">Major negative in this view</b>' : ''}</div>
+        <div class="read"><h5>How to read this view</h5>${STATE_TXT[st.sMode]}</div>
+        <div><h5>Source</h5>${r.source === 'oi' ? 'Open interest (no classified trades yet)' : 'Classified flow (bid/ask proxy)'}</div></div>`;
+    }
+    const was = el.style.display === 'block', oldH = el.offsetHeight; el.innerHTML = h; el.style.display = 'block'; if (!was || el.offsetHeight !== oldH) draw(true);
+    $('sumX').onclick = () => { st.pin = null; renderSummary(); draw(); };
+  }
+
   // ---------- chart ----------
   const cv = $('cv'), ctx = cv.getContext('2d'); let W = 0, H = 0, DPR = 1;
   function resize() { const r = cv.getBoundingClientRect(); DPR = window.devicePixelRatio || 1; W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); }
@@ -927,8 +1078,9 @@ if (typeof module !== 'undefined') module.exports = GM;
   }
   function niceStep(range, n) { const raw = range / n, p = Math.pow(10, Math.floor(Math.log10(raw))); return [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= raw) || 10 * p; }
 
-  function draw() {
-    if (st.view === 'levels') return;
+  function draw(hoverOnly) {
+    if (st.view === 'levels') { $('sum').style.display = 'none'; return; }
+    if (!hoverOnly) queueMicrotask(renderSummary);
     if (!W) resize();
     const c = cur();
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -936,7 +1088,8 @@ if (typeof module !== 'undefined') module.exports = GM;
     $('wmv').textContent = c ? `${st.view} · ${symOf(c)}` : 'open';
     if (!c) { geo = null; return; }
     const sym = st.sym, P0 = GM.prep(c), S = c.spot, Sd = conv(S);
-    const pw = W - L.l - L.r, ph = H - L.t - L.b - (st.view === 'state' ? 14 : 0);
+    const sumEl = $('sum'), sumH = sumEl.style.display === 'block' ? sumEl.offsetHeight : 0, Hc = H - sumH;
+    const pw = W - L.l - L.r, ph = Hc - L.t - L.b - (st.view === 'state' ? 14 : 0);
     const defHalf = S * (sym === 'GLD' ? 0.035 : 0.0105);
     const half = st.half[sym] || defHalf, mid = Sd + (st.pan[sym] || 0);
     const ratio = st.useFut && futInfo(sym) && futInfo(sym).useRatio ? futInfo(sym).ratio : 1;
@@ -959,7 +1112,7 @@ if (typeof module !== 'undefined') module.exports = GM;
     // time axis
     ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = axisC;
     const nT = Math.max(3, Math.floor(pw / 105));
-    for (let k = 0; k <= nT; k++) { const t = t0 + (t1 - t0) * (k + 0.5) / (nT + 1); ctx.fillText(etTime(t).replace(/(\d+:\d+):\d+ /, '$1:00 ').toLowerCase(), x(t), H - L.b + 9); }
+    for (let k = 0; k <= nT; k++) { const t = t0 + (t1 - t0) * (k + 0.5) / (nT + 1); ctx.fillText(etTime(t).replace(/(\d+:\d+):\d+ /, '$1:00 ').toLowerCase(), x(t), L.t + ph + (st.view === 'state' ? 14 : 0) + 9); }
     ctx.textBaseline = 'middle';
 
     // ---- spot history (candles or line) ----
@@ -990,19 +1143,22 @@ if (typeof module !== 'undefined') module.exports = GM;
       colors = [css('--green'), css('--red')];
       if (st.set.dots) for (const w of [1, 5, 10, 15, 30]) { const j = GM.pastIndex(snaps(), st.idx, w); if (j < 0) continue; const pm = new Map(GM.classic(snaps()[j], st.cScope).strikes.map(s => [s.K, s[key]])); lookDots.push({ w, m: pm }); }
       majors = [
-        { v: r.vol.pos, c: css('--green'), side: 'L' }, { v: r.vol.neg, c: css('--red'), side: 'L' },
-        { v: r.oi.pos, c: css('--green'), side: 'R' }, { v: r.oi.neg, c: css('--red'), side: 'R' },
-        { v: r[key].zero, c: css('--orange'), side: 'R', dotted: true, small: 'zero γ' },
+        { v: r.vol.pos, c: css('--green'), side: 'L', kind: 'volPos' }, { v: r.vol.neg, c: css('--red'), side: 'L', kind: 'volNeg' },
+        { v: r.oi.pos, c: css('--green'), side: 'R', kind: 'oiPos' }, { v: r.oi.neg, c: css('--red'), side: 'R', kind: 'oiNeg' },
+        { v: r[key].zero, c: css('--orange'), side: 'R', dotted: true, small: 'zero γ', kind: 'zero' },
       ];
       if (key === 'oi') majors = majors.filter(m => m.side === 'R');
       geo = { mode: 'classic', key };
+      // session trails: zero gamma (orange) and the majors (green / red) at every snapshot so far
+      const hist = GM.history(snaps(), st.idx, st.cScope);
+      if (hist.length > 1) for (const p of hist) { const X = x(p.t); for (const [v, col, rr] of [[p.zero, css('--orange'), 1.6], [p.pos, css('--green'), 1.1], [p.neg, css('--red'), 1.1]]) { if (v == null) continue; const vv = conv(v); if (vv < mid - hd || vv > mid + hd) continue; ctx.fillStyle = col; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(X, y(vv), rr, 0, 7); ctx.fill(); ctx.globalAlpha = 1; } }
     } else {
       const scope = st.sMode === 'gexprofile' ? st.sScope : st.opScope;
       const r = GM.state(snaps(), st.idx, st.sMode, scope);
       if (st.sMode === 'profile') { bars = r.strikes.filter(visible).map(s => ({ K: s.K, cl: s.cl, cs: s.cs, pl: s.pl, ps: s.ps, v: Math.max(s.cl + s.pl, -(s.cs + s.ps)) })); colors = [css('--callc'), css('--putc')]; scaleDiv = 1; unit = 'ct'; }
       else { bars = r.strikes.filter(visible).map(s => ({ K: s.K, v: s.v })); colors = st.sMode === 'gexprofile' ? [css('--green'), css('--red')] : [css('--cyan'), css('--purple')]; scaleDiv = ['vanna', 'charm'].includes(st.sMode) ? 1e6 : 1e9; unit = st.sMode === 'charm' ? 'MM/hr' : scaleDiv === 1e6 ? 'MM' : 'Bn'; }
       if (st.set.dots && st.sMode !== 'profile') for (const w of st.sMode === 'gexprofile' ? [1, 5, 10, 15, 30] : [5, 15, 30]) { const j = GM.pastIndex(snaps(), st.idx, w); if (j < 0) continue; lookDots.push({ w, m: new Map(GM.state(snaps(), j, st.sMode, scope).strikes.map(s => [s.K, s.v])) }); }
-      majors = [{ v: r.maj.pos, c: colors[0], side: 'L' }, { v: r.maj.neg, c: colors[1], side: 'L' }];
+      majors = [{ v: r.maj.pos, c: colors[0], side: 'L', kind: 'stPos' }, { v: r.maj.neg, c: colors[1], side: 'L', kind: 'stNeg' }];
       geo = { mode: st.sMode, scaleDiv, unit };
     }
     let mx = 0; for (const b of bars) { mx = Math.max(mx, Math.abs(b.v)); if (b.v2 != null) mx = Math.max(mx, Math.abs(b.v2)); if (st.sMode === 'profile' && st.view === 'state') mx = Math.max(mx, Math.abs(b.cl), Math.abs(b.cs), Math.abs(b.pl), Math.abs(b.ps)); }
@@ -1044,14 +1200,14 @@ if (typeof module !== 'undefined') module.exports = GM;
           ctx.textAlign = 'right'; ctx.fillText('0DTE IV', xs0 - 14, L.t + ph + 3); ctx.textBaseline = 'middle';
         }
       }
-      if (st.set.em && k.em) for (const sg of [1, -1]) { const v = conv(S + sg * k.em.move); if (v < mid - hd || v > mid + hd) continue; const Y = y(v); ctx.strokeStyle = muted; ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L.l, Y + .5); ctx.lineTo(L.l + pw, Y + .5); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = muted; ctx.textAlign = 'left'; ctx.fillText(sg > 0 ? '+1σ' : '−1σ', L.l + 4, Y - 7); }
+      if (st.set.em && k.em) for (const sg of [1, -1]) { const v = conv(S + sg * k.em.move); if (v < mid - hd || v > mid + hd) continue; const Y = y(v); geo.emY = (geo.emY || []).concat([Y]); ctx.strokeStyle = muted; ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L.l, Y + .5); ctx.lineTo(L.l + pw, Y + .5); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = muted; ctx.textAlign = 'left'; ctx.fillText(sg > 0 ? '+1σ' : '−1σ', L.l + 4, Y - 7); }
     }
 
     // ---- level lines ----
     const labelBox = (txt, X, Y, col, align, fg = '#000') => { ctx.font = '600 10px "JetBrains Mono", monospace'; const w = ctx.measureText(txt).width + 10; const bx = align === 'L' ? X : X - w; ctx.fillStyle = col; roundRect(bx, Y - 8, w, 16, 3); ctx.fill(); ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.fillText(txt, bx + w / 2, Y + .5); ctx.font = '10px "JetBrains Mono", monospace'; };
-    const lc = majors.filter(m => m.v != null);
+    const lc = majors.filter(m => m.v != null); const levels = [];
     for (const m of lc) {
-      const v = conv(m.v); if (v < mid - hd || v > mid + hd) continue; const Y = Math.round(y(v)) + .5;
+      const v = conv(m.v); if (v < mid - hd || v > mid + hd) continue; const Y = Math.round(y(v)) + .5; levels.push({ Y, kind: m.kind, raw: m.v });
       ctx.strokeStyle = m.c; ctx.globalAlpha = m.dotted ? 0.8 : 0.55; ctx.lineWidth = 1; ctx.setLineDash(m.dotted ? [1, 3] : [5, 4]); ctx.beginPath(); ctx.moveTo(L.l, Y); ctx.lineTo(L.l + pw, Y); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
       const txt = fmt(v, 2).replace(/,/g, '');
       if (m.small) { ctx.fillStyle = m.c; ctx.textAlign = 'right'; ctx.fillText(`${m.small} ${txt}`, L.l + pw - 4, Y - 7); }
@@ -1059,12 +1215,14 @@ if (typeof module !== 'undefined') module.exports = GM;
       else labelBox(txt, L.l + pw + L.r - 6, Y, m.c, 'R', '#000');
     }
     // spot line + label, current time line
-    const Ys = Math.round(y(Sd)) + .5;
+    const Ys = Math.round(y(Sd)) + .5; levels.push({ Y: Ys, kind: 'spot', raw: S });
     ctx.strokeStyle = axisC; ctx.globalAlpha = 0.75; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L.l, Ys); ctx.lineTo(L.l + pw, Ys); ctx.stroke();
     const Xt = Math.round(x(c.asOf)) + .5; ctx.globalAlpha = 0.45; ctx.beginPath(); ctx.moveTo(Xt, L.t); ctx.lineTo(Xt, L.t + ph); ctx.stroke(); ctx.globalAlpha = 1;
     labelBox(fmt(Sd, 2).replace(/,/g, ''), 2, Ys, css('--spotbg'), 'L', css('--spotfg'));
     // bar scale hint
     if (mx > 0) { ctx.fillStyle = muted; ctx.textAlign = 'right'; ctx.fillText(`${fmt(mx / scaleDiv, unit === 'ct' ? 0 : 3)} ${unit === 'ct' ? 'contracts' : unit}`, xc + maxLen, L.t - 11); }
+    if (st.pin != null) { const pv = conv(st.pin); if (pv >= mid - hd && pv <= mid + hd) { const Y = Math.round(y(pv)) + .5; ctx.strokeStyle = css('--blue'); ctx.setLineDash([6, 3]); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(L.l, Y); ctx.lineTo(L.l + pw, Y); ctx.stroke(); ctx.setLineDash([]); labelBox(fmt(pv, 2).replace(/,/g, ''), L.l + pw + L.r - 6, Y, css('--blue'), 'R', '#06121f'); levels.push({ Y, kind: 'pin', raw: st.pin }); } }
+    for (const Y of (geo.emY || [])) levels.push({ Y, kind: 'em' });
     // crosshair
     if (st.hover && st.set.cross) {
       const { px, py } = st.hover; if (px > L.l && px < L.l + pw && py > L.t && py < L.t + ph) {
@@ -1072,7 +1230,7 @@ if (typeof module !== 'undefined') module.exports = GM;
         labelBox(fmt(yInv(py), 2).replace(/,/g, ''), 2, py, css('--panel2'), 'L', css('--text'));
       }
     }
-    Object.assign(geo, { y, yInv, x, xc, sx, bars, pw, ph, mid, hd, t0, t1 });
+    Object.assign(geo, { y, yInv, x, xc, sx, bars, pw, ph, mid, hd, t0, t1, levels });
   }
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
   function darken(c) { const m = c.match(/^#(..)(..)(..)$/); if (!m) return c; const f = v => Math.round(parseInt(v, 16) * 0.55).toString(16).padStart(2, '0'); return '#' + f(m[1]) + f(m[2]) + f(m[3]); }
@@ -1081,25 +1239,40 @@ if (typeof module !== 'undefined') module.exports = GM;
   let drag = null;
   cv.addEventListener('mousemove', e => {
     const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-    if (drag && geo) { const dy = py - drag.py; st.pan[st.sym] = drag.pan + dy / geo.ph * 2 * geo.hd; draw(); return; }
-    st.hover = { px, py }; draw(); tip(px, py);
+    if (drag && geo && (drag.moved || Math.abs(py - drag.py) > 4)) { drag.moved = true; cv.style.cursor = 'grabbing'; const dy = py - drag.py; st.pan[st.sym] = drag.pan + dy / geo.ph * 2 * geo.hd; draw(); return; }
+    st.hover = { px, py }; draw(true); tip(px, py);
   });
-  cv.addEventListener('mouseleave', () => { st.hover = null; $('tip').style.display = 'none'; draw(); });
-  cv.addEventListener('mousedown', e => { if (!geo) return; const r = cv.getBoundingClientRect(); drag = { py: e.clientY - r.top, pan: st.pan[st.sym] || 0 }; cv.style.cursor = 'grabbing'; });
-  window.addEventListener('mouseup', () => { drag = null; cv.style.cursor = 'crosshair'; });
+  cv.addEventListener('mouseleave', () => { st.hover = null; $('tip').style.display = 'none'; draw(true); });
+  cv.addEventListener('mousedown', e => { if (!geo) return; const r = cv.getBoundingClientRect(); drag = { py: e.clientY - r.top, px: e.clientX - r.left, pan: st.pan[st.sym] || 0, moved: false }; });
+  window.addEventListener('mouseup', e => {
+    if (drag && !drag.moved && geo && e.target === cv) { const lvl = (geo.levels || []).filter(l => l.raw != null && l.kind !== 'pin' && Math.abs(l.Y - drag.py) <= 5)[0]; st.pin = lvl ? lvl.raw : unconv(geo.yInv(drag.py)); renderSummary(); draw(); }
+    drag = null; cv.style.cursor = 'crosshair';
+  });
+  window.addEventListener('keyup', e => { if (e.key === 'Escape' && st.pin != null) { st.pin = null; renderSummary(); draw(); } });
   cv.addEventListener('dblclick', () => { delete st.pan[st.sym]; delete st.half[st.sym]; draw(); });
   cv.addEventListener('wheel', e => { const c = cur(); if (!c) return; e.preventDefault(); const def = c.spot * (st.sym === 'GLD' ? 0.035 : 0.0105); const h = st.half[st.sym] || def; st.half[st.sym] = Math.min(c.spot * 0.15, Math.max(c.spot * 0.001, h * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); draw(); }, { passive: false });
   function tip(px, py) {
-    const t = $('tip'); if (!geo || !geo.bars || !geo.bars.length) { t.style.display = 'none'; return; }
-    const v = geo.yInv(py); let best = null; for (const b of geo.bars) { const d = Math.abs(conv(b.K) - v); if (!best || d < best.d) best = { b, d }; }
-    if (!best || Math.abs(geo.y(conv(best.b.K)) - py) > 10) { t.style.display = 'none'; return; }
-    const b = best.b; let body;
-    if (geo.mode === 'profile') body = `calls  +${fmt(b.cl, 0)} / ${fmt(b.cs, 0)}<br>puts   +${fmt(b.pl, 0)} / ${fmt(b.ps, 0)}`;
-    else if (geo.mode === 'classic') { const r = GM.classic(cur(), st.cScope).strikes.find(s => s.K === b.K) || {}; body = `vol gex ${fmt((r.vol || 0) / 1e9, 4)}Bn<br>oi  gex ${fmt((r.oi || 0) / 1e9, 4)}Bn`; }
-    else body = `${fmt(b.v / geo.scaleDiv, 4)} ${geo.unit}`;
-    t.innerHTML = `<b>${fmt(conv(b.K), 2)}</b> <span style="color:var(--muted)">(${st.sym} ${b.K})</span><br>${body}`;
-    t.style.display = 'block'; const r = $('chartWrap').getBoundingClientRect();
-    t.style.left = Math.min(px + 14, r.width - t.offsetWidth - 8) + 'px'; t.style.top = Math.max(4, py - t.offsetHeight - 8) + 'px';
+    const t = $('tip'); if (!geo || !cur()) { t.style.display = 'none'; return; }
+    let html = null;
+    const lv = (geo.levels || []).filter(l => Math.abs(l.Y - py) <= 5).sort((a, b) => Math.abs(a.Y - py) - Math.abs(b.Y - py))[0];
+    const onBar = geo.bars && geo.bars.length && Math.abs(px - geo.xc) < geo.pw * 0.47;
+    if (lv && !(onBar && lv.kind === 'spot')) {
+      const [tt, body] = LEVEL_TXT[lv.kind] || ['', ''];
+      html = `<div class="tt">${tt}${lv.raw != null ? ` · <span class="mono">${F(lv.raw)}</span>` : ''}</div>${body}<div class="mu" style="margin-top:4px;color:var(--muted)">Click for the full read.</div>`;
+    } else if (geo.bars && geo.bars.length) {
+      const v = geo.yInv(py); let best = null; for (const b of geo.bars) { const d = Math.abs(conv(b.K) - v); if (!best || d < best.d) best = { b, d }; }
+      if (best && Math.abs(geo.y(conv(best.b.K)) - py) <= 8) {
+        const b = best.b;
+        if (geo.mode === 'classic') {
+          const si = strikeInfo(b.K), side = si.row[si.key] >= 0;
+          html = `<div class="tt">${F(b.K)} <span class="mono" style="color:var(--muted)">${st.sym} ${b.K}</span></div><span class="${side ? 'c-gr' : 'c-rd'}">${side ? 'Calls dominate: bullish pressure' : 'Puts dominate: bearish pressure'}</span><br>volume GEX <span class="mono">${fmt(si.row.vol / 1e9, 3)}Bn</span> · OI GEX <span class="mono">${fmt(si.row.oi / 1e9, 3)}Bn</span>${si.trend ? '<br>' + si.trend : ''}`;
+        } else if (geo.mode === 'profile') html = `<div class="tt">${F(b.K)}</div>calls <span class="mono">+${fmt(b.cl, 0)} / ${fmt(b.cs, 0)}</span><br>puts <span class="mono">+${fmt(b.pl, 0)} / ${fmt(b.ps, 0)}</span><br><span style="color:var(--muted)">${STATE_TXT.profile}</span>`;
+        else html = `<div class="tt">${F(b.K)} · <span class="mono">${fmt(b.v / geo.scaleDiv, 4)} ${geo.unit}</span></div><span style="color:var(--muted)">${STATE_TXT[geo.mode]}</span>`;
+      }
+    }
+    if (!html) { t.style.display = 'none'; return; }
+    t.innerHTML = html; t.style.display = 'block'; const r = $('chartWrap').getBoundingClientRect();
+    t.style.left = Math.min(px + 16, r.width - t.offsetWidth - 8) + 'px'; t.style.top = (py - t.offsetHeight - 10 < 4 ? py + 16 : py - t.offsetHeight - 10) + 'px';
   }
   window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if (e.key === 'ArrowLeft') step(-1); else if (e.key === 'ArrowRight') step(1); else if (e.key === ' ') { e.preventDefault(); togglePlay(); } });
   new ResizeObserver(() => { resize(); draw(); }).observe($('chartWrap'));
@@ -1137,6 +1310,13 @@ if (typeof module !== 'undefined') module.exports = GM;
     modal(`<h3>How this terminal works</h3>
     <p class="mu">A free rebuild of GexBot's Classic and State views from Cboe's delayed option chains (about 15 minutes late).</p>
     <h4>classic</h4><p>Naive GEX per strike: <code>Γ × contracts × 100 × spot² × 1%</code>, calls positive and puts negative, in $Bn per 1% move. Bright bars use today's <b>volume</b>; the faint wide bars behind them use <b>open interest</b>. Left-side labels are the volume majors, right-side labels the open-interest majors. <b>Zero gamma</b> is GexBot's method: a cubic spline through the per-strike GEX, zero crossing between the two majors nearest spot. <b>Max change</b> is the strike whose volume GEX changed most over the last 1–30 minutes; the coloured dots on the bars show where each bar was 1/5/10/15/30 minutes ago.</p>
+    <h4>playbook (classic)</h4><ul>
+    <li><b>Sell the major positive</b> (ceiling), <b>buy the major negative</b> (floor). Options traders cash out there because their gains flatten past the 25–50 delta and 0DTE time decay accelerates. The dealer then unwinds his futures hedge. Don't trade the middle.</li>
+    <li><b>Zero gamma is the battleground.</b> Above it: lean long. Below it: lean short. Don't trade at it. When its orange trail clusters (jumps around), buyers and sellers are fighting. Wait for the break, then enter on the retest with the stop on the other side.</li>
+    <li><b>Filter:</b> net GEX negative, max change all red and price below zero γ means no longs except at the floor. Mirror that for shorts.</li>
+    <li><b>Confirmation at a level:</b> at the floor you want max change turning green. At the ceiling, turning red. If the floor itself moves lower, puts are being added and the move may continue.</li>
+    <li><b>Clock:</b> a level hit at 10–11 am is stronger than at 3 pm. 0DTE decay makes late targets harder to reach. Many traders follow SPX levels even for NQ.</li></ul>
+    <p class="mu">Hover any line or bar for an explanation. Click any price for a full read at the bottom. Esc closes it.</p>
     <h4>state</h4><p>GexBot classifies every option trade as taker-long or taker-short from tick data. Cboe's free data has no trade tape, so this uses a <b>proxy</b>: each snapshot's new volume is split by where that contract's last trade sits between bid and ask (at the ask = bought, at the bid = sold). It is cumulative through the session, so it gets better with more live snapshots.</p>
     <ul><li><b>options profile</b> (no toggle): taker long (right) and short (left) contracts — calls orange, puts purple.</li>
     <li><b>delta</b> (DEX): taker net × Δ × 100 × spot.</li><li><b>gamma</b> (convexity): taker net × Γ × 100 × spot² × 1% — cyan long gamma, purple short gamma.</li>
