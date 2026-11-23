@@ -128,7 +128,7 @@ footer{max-width:1520px;margin:0 auto;padding:0 24px 32px;color:var(--mut);font-
       <li>Click <b>Download CSV</b> at the bottom of the table and drop the file here.</li>
       <li><b>Gold:</b> do the same on <a href="https://www.cboe.com/data/quotes/gld/options" target="_blank" rel="noopener">Cboe → GLD → Options</a>, type the GC price at that moment into "Futures price", then click <b>Gold mode</b>. Levels are converted by the ratio GC ÷ GLD.</li>
     </ol>
-    <p class="small muted" style="margin-top:10px"><b>For the intraday Classic chart:</b> download a fresh CSV every few minutes and add each one with "load snapshots" (or drop several at once). Each file becomes one point in time; the price line, level lines, max-change table and playback are built from them. Snapshots stay in this tab only; reloading the page clears them.</p><p class="small muted">Open interest is published once a day (overnight), so OI-based levels are fixed for the session. Volume-based levels change with every refresh. Re-download during the day to update Vol GEX.</p>
+    <p class="small muted" style="margin-top:10px"><b>Daily snapshot files</b> (<code>SPX_YYYY-MM-DD_gex.csv</code> etc., saved by the scheduled download) already contain the matching futures price, so levels appear in ES / NQ / GC prices as soon as you drop one in.</p><p class="small muted"><b>For the intraday Classic chart:</b> download a fresh CSV every few minutes and add each one with "load snapshots" (or drop several at once). Each file becomes one point in time; the price line, level lines, max-change table and playback are built from them. Snapshots stay in this tab only; reloading the page clears them.</p><p class="small muted">Open interest is published once a day (overnight), so OI-based levels are fixed for the session. Volume-based levels change with every refresh. Re-download during the day to update Vol GEX.</p>
   </div>
 </section>
 
@@ -285,13 +285,18 @@ const GEX = (() => {
   }
   const num = v => { const x = parseFloat(String(v ?? '').replace(/[,$%]/g, '')); return isFinite(x) ? x : 0; };
   const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
-  function parseDateText(s) { // "November 20, 2026 at 4:15 PM EST" or "Fri Nov 20 2026"
-    const m = String(s).match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})(?:\s+at\s+(\d{1,2}):(\d{2})\s*([AP]M))?/);
+  // "November 20, 2026 at 4:15 PM EST", "November 23, 2026, 6:11 AM GMT+5:30" or "Fri Nov 20 2026"
+  function parseDateText(s) {
+    const m = String(s).match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})(?:,?\s*(?:at\s+)?(\d{1,2}):(\d{2})\s*([AP]M)(?:\s*(GMT|UTC)\s*([+-])(\d{1,2})(?::?(\d{2}))?|\s*(E[SD]T|C[SD]T|P[SD]T))?)?/i);
     if (!m || !(m[1].toLowerCase() in MONTHS)) return null;
-    let h = 16, mi = 0;
-    if (m[4]) { h = +m[4] % 12 + (m[6] === 'PM' ? 12 : 0); mi = +m[5]; }
-    return { y: +m[3], mo: MONTHS[m[1].toLowerCase()], d: +m[2], h, mi };
+    let h = 16, mi = 0, offMin = null;
+    if (m[4]) { h = +m[4] % 12 + (m[6].toUpperCase() === 'PM' ? 12 : 0); mi = +m[5]; }
+    if (m[7]) offMin = (m[8] === '-' ? -1 : 1) * (+m[9] * 60 + (+m[10] || 0));
+    else if (m[11]) offMin = { EST: -300, EDT: -240, CST: -360, CDT: -300, PST: -480, PDT: -420 }[m[11].toUpperCase()];
+    return { y: +m[3], mo: MONTHS[m[1].toLowerCase()], d: +m[2], h, mi, offMin };
   }
+  // wall-clock with a known UTC offset (minutes) -> epoch ms; null offset means US Eastern
+  const toMs = p => p.offMin == null ? etToMs(p.y, p.mo, p.d, p.h, p.mi) : Date.UTC(p.y, p.mo, p.d, p.h, p.mi) - p.offMin * 60000;
   // ET wall-clock -> epoch ms (handles US DST)
   function etToMs(y, mo, d, h, mi) {
     const dstStart = nthSunday(y, 2, 2), dstEnd = nthSunday(y, 10, 1); // 2nd Sun Mar, 1st Sun Nov
@@ -327,8 +332,8 @@ const GEX = (() => {
     for (const l of lines.slice(0, hi)) {
       const ms = l.match(/Last:\s*([\d,]+\.?\d*)/i); if (ms) spot = num(ms[1]);
       if (!symbol) { const c = splitCSV(l)[0]; if (c && !/^date/i.test(c)) symbol = c.replace(/^"|"$/g, ''); }
-      const md = l.match(/Date:\s*([^,]+(?:,\s*\d{4})?[^,]*)/i);
-      if (md) { const p = parseDateText(md[1]); if (p) asOf = etToMs(p.y, p.mo, p.d, p.h, p.mi); }
+      const md = l.match(/Date:\s*([^"\n]+)/i);
+      if (md) { const p = parseDateText(md[1]); if (p) asOf = toMs(p); }
     }
     const H = splitCSV(lines[hi]).map(h => h.toLowerCase());
     const idxAll = re => H.map((h, i) => re.test(h) ? i : -1).filter(i => i >= 0);
@@ -366,8 +371,31 @@ const GEX = (() => {
     return { symbol: root.replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/,'$1'), spot, asOf, rows };
   }
 
+  // Compact daily snapshot written by the scheduled download:
+  // "#GEXSNAP symbol=SPX spot=6910.39 cboe_timestamp_et=2026-11-23 05:20:46 futures=ES futures_price=6935 futures_note=..."
+  // then "option,open_interest,volume,iv,gamma,delta" rows.
+  function parseGexSnap(text) {
+    const lines = text.split(/\r?\n/);
+    const meta = {};
+    const head = lines[0].replace(/^#GEXSNAP\s*/, '');
+    for (const m of head.matchAll(/(\w+)=((?:(?!\s\w+=).)*)/g)) meta[m[1]] = m[2].trim();
+    let asOf = null;
+    const tm = String(meta.cboe_timestamp_et || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    if (tm) asOf = etToMs(+tm[1], +tm[2] - 1, +tm[3], +tm[4], +tm[5]);
+    const rows = [];
+    for (const l of lines.slice(1)) {
+      if (!l || l.startsWith('#') || l.startsWith('option')) continue;
+      const c = l.split(',');
+      const p = parseSym(c[0]); if (!p) continue;
+      rows.push({ ...p, oi: num(c[1]), vol: num(c[2]), iv: num(c[3]), gamma: num(c[4]), delta: num(c[5]) });
+    }
+    const fp = num(meta.futures_price);
+    return { symbol: meta.symbol || (rows[0] && rows[0].root.replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1')) || '', spot: num(meta.spot), asOf, rows,
+      futures: fp > 0 ? { symbol: meta.futures || '', price: fp, note: meta.futures_note || '' } : null };
+  }
   function parseAny(text) {
     const t = text.trim();
+    if (t.startsWith('#GEXSNAP')) return parseGexSnap(t);
     if (t.startsWith('{') || t.startsWith('[')) return parseCboeJSON(JSON.parse(t));
     return parseCboeCSV(text);
   }
@@ -523,7 +551,7 @@ const GEX = (() => {
     return { exps, dtes, strikes: ks, gex, iv, width: w, S };
   }
 
-  return { parseAny, parseCboeCSV, parseCboeJSON, compute, surfaces, bsGamma, bsDelta, expiryMs, etToMs };
+  return { parseAny, parseGexSnap, parseCboeCSV, parseCboeJSON, compute, surfaces, bsGamma, bsDelta, expiryMs, etToMs };
 })();
 if (typeof module !== 'undefined') module.exports = GEX;
 
@@ -583,9 +611,18 @@ if (typeof module !== 'undefined') module.exports = GEX;
     const snap = { asOf: ch.asOf, chain: ch };
     if (i >= 0) state.snaps[i] = snap; else state.snaps.push(snap);
   }
+  // a daily snapshot file carries the futures price from the same moment: use it so levels convert with no typing
+  function applySnapFutures(ch) {
+    if (!ch.futures || !(ch.futures.price > 0)) return '';
+    $('fut').value = ch.futures.price;
+    if (/^GLD/i.test(ch.symbol || '') && (+$('rangePct').value || 0) < 8) $('rangePct').value = 10;
+    state.cache.clear(); state.futMode = true;
+    $('cvFut').classList.add('on'); $('cvSpot').classList.remove('on');
+    return ` · ${ch.futures.symbol || 'futures'} ${ch.futures.price} filled in from the file${ch.futures.note ? ' (' + ch.futures.note + ')' : ''}`;
+  }
   async function ingestFiles(files) {
     const follow = state.idx >= state.snaps.length - 1;
-    let ok = 0, bad = [];
+    let ok = 0, bad = [], futNote = '';
     for (const f of files) {
       try {
         const ch = GEX.parseAny(await f.text());
@@ -594,12 +631,12 @@ if (typeof module !== 'undefined') module.exports = GEX;
         if (!ch.spot) throw new Error('no spot price found');
         const sym = (state.snaps[0] && state.snaps[0].chain.symbol) || ch.symbol;
         if (state.snaps.length && ch.symbol && sym && ch.symbol !== sym) throw new Error(`symbol ${ch.symbol} differs from loaded ${sym}; clear history first`);
-        addSnap(prune(ch)); ok++;
+        addSnap(prune(ch)); ok++; futNote = applySnapFutures(ch) || futNote;
       } catch (e) { bad.push(`${f.name}: ${e.message}`); }
     }
     state.snaps.sort((a, b) => a.asOf - b.asOf); state.cache.clear();
     if (follow || ok) state.idx = state.snaps.length - 1;
-    if (ok) msg(`Added ${ok} snapshot${ok > 1 ? 's' : ''} · ${state.snaps.length} in history · ${cur().chain.symbol || ''} spot ${cur().chain.spot.toFixed(2)}` + (bad.length ? ` · skipped: ${bad.join('; ')}` : ''), bad.length ? 'warn' : 'pos');
+    if (ok) msg(`Added ${ok} snapshot${ok > 1 ? 's' : ''} · ${state.snaps.length} in history · ${cur().chain.symbol || ''} spot ${cur().chain.spot.toFixed(2)}` + futNote + (bad.length ? ` · skipped: ${bad.join('; ')}` : ''), bad.length ? 'warn' : 'pos');
     else msg('Could not load: ' + bad.join('; '), 'neg');
     run();
   }
@@ -607,8 +644,8 @@ if (typeof module !== 'undefined') module.exports = GEX;
     try {
       const ch = GEX.parseAny(text); if (!ch.rows.length) throw new Error('No option rows recognised');
       if (!ch.asOf) ch.asOf = Date.now(); if (!ch.spot) throw new Error('No spot price in the text');
-      addSnap(prune(ch)); state.snaps.sort((a, b) => a.asOf - b.asOf); state.cache.clear(); state.idx = state.snaps.length - 1;
-      msg(`Added pasted snapshot · ${state.snaps.length} in history`, 'pos'); run();
+      addSnap(prune(ch)); const fn = applySnapFutures(ch); state.snaps.sort((a, b) => a.asOf - b.asOf); state.cache.clear(); state.idx = state.snaps.length - 1;
+      msg(`Added pasted snapshot · ${state.snaps.length} in history` + fn, 'pos'); run();
     } catch (e) { msg('Could not parse: ' + e.message, 'neg'); }
   }
   const drop = $('drop'), file = $('file');
