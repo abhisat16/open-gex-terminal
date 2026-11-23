@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open GEX Terminal — GexBot-Classic-style levels from Cboe data</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f7f9;--panel:#ffffff;--panel2:#f9fafb;--line:#e5e7eb;--line2:#d1d5db;--txt:#111827;--txt2:#374151;--mut:#6b7280;--pos:#16a34a;--neg:#dc2626;--acc:#2563eb;--accSoft:#eff6ff;--warn:#b45309;--zero:#d97706;--shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);--sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+[data-theme="dark"]{--bg:#0b0f14;--panel:#121821;--panel2:#0f141b;--line:#1f2733;--line2:#2b3644;--txt:#e5e7eb;--txt2:#cbd5e1;--mut:#8b95a5;--pos:#22c55e;--neg:#ef4444;--acc:#60a5fa;--accSoft:#0f2238;--warn:#f59e0b;--zero:#f59e0b;--shadow:none}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:30px;height:30px;border-radius:8px;background:var(--acc);color:#fff;display:grid;place-items:center;font:600 13px var(--sans);letter-spacing:-.3px}
+header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.2px}
+header .sub{color:var(--mut);font-size:12px}
+header .stamp{margin-left:auto;font:12px/1.4 var(--mono);color:var(--mut);text-align:right}
+main{padding:20px 24px 40px;max-width:1520px;margin:0 auto}
+.grid{display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+.panel h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 12px;font-weight:600}
+#load{grid-template-columns:1.25fr 1fr}
+#drop{border:1.5px dashed var(--line2);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:.15s;background:var(--panel2)}
+#drop.hover,#drop:hover{border-color:var(--acc);background:var(--accSoft)}
+#drop b{color:var(--acc);font-weight:600}
+ol{margin:6px 0 0 18px;padding:0;color:var(--txt2)} ol li{margin:4px 0}
+a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+button,select,input{font:inherit;font-size:13px;color:var(--txt);background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:7px 12px;transition:border-color .15s,background .15s}
+button{cursor:pointer;font-weight:500} button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.primary:hover{filter:brightness(1.05)}
+input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--accSoft)}
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:end}
+.controls label{display:flex;flex-direction:column;font-size:11px;color:var(--mut);gap:5px;font-weight:500;letter-spacing:.02em}
+.controls input[type=number]{width:110px;font-family:var(--mono)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:var(--panel2);padding:2px;gap:2px}
+.seg button{border:0;border-radius:6px;background:transparent;padding:5px 12px;color:var(--txt2)}
+.seg button.on{background:var(--panel);color:var(--txt);box-shadow:var(--shadow);outline:1px solid var(--line)}
+[data-theme="dark"] .seg button.on{background:var(--accSoft);color:#fff;outline:1px solid var(--line2)}
+#cards{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+.card .k{font-size:11px;color:var(--mut);font-weight:500;letter-spacing:.02em}
+.card .v{font:500 20px/1.3 var(--mono);margin-top:4px;letter-spacing:-.3px}
+.card .s{font:11.5px var(--mono);color:var(--mut);margin-top:2px}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .zero{color:var(--zero)} .warn{color:var(--warn)}
+.two{grid-template-columns:1fr 1fr}
+.chart{height:560px}
+.chart.short{height:420px}
+table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left;font-family:var(--sans)}
+th{color:var(--mut);font:500 11px var(--sans);letter-spacing:.03em}
+tbody tr:hover{background:var(--panel2)}
+.muted{color:var(--mut)} .small{font-size:12px}
+#empty{padding:48px;text-align:center;color:var(--mut)}
+.hidden{display:none!important}
+details{border-top:1px solid var(--line);padding:10px 0} details:first-of-type{border-top:0}
+details summary{cursor:pointer;color:var(--txt);font-weight:500}
+.explain p{margin:8px 0;color:var(--txt2);max-width:980px} .explain code{background:var(--panel2);border:1px solid var(--line);padding:1px 5px;border-radius:5px;font:12px var(--mono)}
+#msg{min-height:18px;font-size:12.5px}
+textarea{width:100%;height:70px;background:var(--panel2);color:var(--txt);border:1px solid var(--line2);border-radius:8px;font:12px var(--mono);padding:8px}
+.tabs{display:inline-flex;margin-left:20px;border:1px solid var(--line2);border-radius:9px;overflow:hidden;background:var(--panel2);padding:2px;gap:2px}
+.tabs button{border:0;border-radius:7px;background:transparent;padding:6px 16px;color:var(--txt2)}
+.tabs button.on{background:var(--panel);color:var(--txt);box-shadow:var(--shadow);outline:1px solid var(--line)}
+[data-theme="dark"] .tabs button.on{background:var(--accSoft);color:#fff}
+#themeBtn{margin-left:12px}
+#classic{grid-template-columns:1fr 300px;align-items:start}
+#mainChart{height:720px}
+.side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13px;box-shadow:var(--shadow)}
+.side h3{font-size:13px;margin:0 0 10px;font-weight:600;letter-spacing:.02em}
+.side .sec{border-top:1px solid var(--line);padding:10px 0 8px}
+.side .sec b{display:block;font-size:11px;margin-bottom:6px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.side .row{display:flex;justify-content:space-between;font:12.5px var(--mono);padding:2px 0}
+.side .row span:first-child{font-family:var(--sans);color:var(--txt2)}
+.side .row span.pos:first-child{color:var(--pos)} .side .row span.neg:first-child{color:var(--neg)} .side .row span.zero:first-child{color:var(--zero)}
+.side .seg{width:100%;margin-bottom:8px}.side .seg button{flex:1}
+.side .stack button{display:block;width:100%;margin:5px 0;text-align:center}
+.side .stack button.on{background:var(--accSoft);color:var(--acc);border-color:var(--acc)}
+.mc td,.mc th{padding:3px 4px;font-size:11.5px}
+.play{display:flex;align-items:center;gap:8px;margin-top:8px}
+.play input[type=range]{flex:1;accent-color:var(--acc)}
+input[type=range]{accent-color:var(--acc);padding:0;border:0}
+footer{max-width:1520px;margin:0 auto;padding:0 24px 32px;color:var(--mut);font-size:12px}
+@media (max-width:1100px){#classic{grid-template-columns:1fr}}
+@media (max-width:1000px){#load,.two{grid-template-columns:1fr} header{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">γ</div>
+    <div><h1>Open GEX Terminal</h1>
+    <div class="sub">Dealer gamma levels from Cboe's free delayed option chains · SPX · NDX · GLD</div></div>
+  </div>
+  <div class="tabs" id="tabs"><button data-v="classic" class="on">Classic</button><button data-v="analytics">Analytics</button></div>
+  <div class="stamp" id="stamp">No data loaded</div>
+  <button id="themeBtn" title="Switch light / dark theme">Dark mode</button>
+</header>
+<main class="grid">
+
+<section id="load" class="grid">
+  <div class="panel">
+    <h2>1 · Load a chain</h2>
+    <div id="drop">
+      <div><b>Drop the Cboe CSV (or JSON) here</b> or click to choose a file</div>
+      <div class="small muted" style="margin-top:6px">Everything is computed in your browser. Nothing is uploaded.</div>
+      <input id="file" type="file" multiple accept=".csv,.json,.txt" class="hidden">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button id="goldBtn" class="primary" title="Applies gold settings to a GLD file you loaded and converts every level to gold futures (GC) prices">Gold mode (GLD → GC)</button>
+      <button id="demoBtn">Load synthetic demo session</button>
+      <button id="pasteToggle">Paste JSON/CSV instead</button>
+    </div>
+    <div id="pasteBox" class="hidden" style="margin-top:8px">
+      <textarea id="pasteTxt" placeholder="Paste the Cboe JSON or CSV text here"></textarea>
+      <button id="pasteGo" class="primary" style="margin-top:6px">Parse pasted data</button>
+    </div>
+    <div id="msg" class="muted" style="margin-top:8px"></div>
+  </div>
+  <div class="panel">
+    <h2>How to get the data (free, 15-min delayed)</h2>
+    <ol>
+      <li>Open <a href="https://www.cboe.com/data/quotes/spx/options" target="_blank" rel="noopener">cboe.com → SPX → Options</a> (or SPY, QQQ, NDX, GLD…).</li>
+      <li>Set <b>Options Range: All</b> and <b>Expiration: All</b> (or a near-term subset for 0DTE work).</li>
+      <li>Click <b>Download CSV</b> at the bottom of the table and drop the file here.</li>
+      <li><b>Gold:</b> do the same on <a href="https://www.cboe.com/data/quotes/gld/options" target="_blank" rel="noopener">Cboe → GLD → Options</a>, type the GC price at that moment into "Futures price", then click <b>Gold mode</b>. Levels are converted by the ratio GC ÷ GLD.</li>
+    </ol>
+    <p class="small muted" style="margin-top:10px"><b>For the intraday Classic chart:</b> download a fresh CSV every few minutes and add each one with "load snapshots" (or drop several at once). Each file becomes one point in time; the price line, level lines, max-change table and playback are built from them. Snapshots stay in this tab only; reloading the page clears them.</p><p class="small muted">Open interest is published once a day (overnight), so OI-based levels are fixed for the session. Volume-based levels change with every refresh. Re-download during the day to update Vol GEX.</p>
+  </div>
+</section>
+
+<section class="panel" id="ctrlPanel">
+  <h2>2 · Settings</h2>
+  <div class="controls">
+    <label>Expiry scope
+      <span class="seg" id="scopeSeg">
+        <button data-v="zero" title="Nearest expiry only (0DTE on expiry days)">Zero</button>
+        <button data-v="one" title="Next expiry after the nearest">One</button>
+        <button data-v="custom" title="All expiries up to N days">≤ N days</button>
+        <button data-v="full" class="on" title="All expiries up to 90 days (GexBot 'full')">Full (90d)</button>
+      </span>
+    </label>
+    <label>N days<input id="maxDays" type="number" value="30" min="1" step="1"></label>
+    <label>Strike range ±%<input id="rangePct" type="number" value="3" min="1" max="40" step="0.5"></label>
+    <label>Spot override<input id="spot" type="number" step="0.01" placeholder="from file"></label>
+    <label>Futures price (ES/NQ/GC)<input id="fut" type="number" step="0.25" placeholder="optional"></label>
+    <label>Rate r<input id="rate" type="number" value="0.04" step="0.0025"></label>
+    <label>Div yield q<input id="divq" type="number" value="0.012" step="0.001"></label>
+    <label>Surface max DTE<input id="surfDays" type="number" value="60" min="2" step="1"></label>
+    <button id="copyBtn" title="Copy levels as text">Copy levels</button>
+  </div>
+</section>
+
+
+<section id="classicWrap" class="grid hidden">
+  <div id="classic" class="grid">
+    <div class="panel" style="padding:8px"><div id="mainChart"></div></div>
+    <aside class="side">
+      <h3>classic</h3>
+      <div class="seg" style="display:flex"><button id="cvSpot" class="on">spot price</button><button id="cvFut">futures</button></div>
+      <div class="stack" id="cScope">
+        <button data-v="full" class="on">≤ 90d (agg)</button>
+        <button data-v="zero">latest expiry</button>
+        <button data-v="one">next expiry</button>
+      </div>
+      <div class="sec"><b>update</b>
+        <div class="row"><span>date</span><span id="cDate">–</span></div>
+        <div class="row"><span>time (ET)</span><span id="cTime">–</span></div>
+        <div class="row"><span id="cSym">spot</span><span id="cPx">–</span></div>
+        <div class="row"><span></span><span id="cChg" class="muted">–</span></div>
+      </div>
+      <div class="sec"><b>volume</b>
+        <div class="row"><span class="zero">zero gamma</span><span id="vZero">–</span></div>
+        <div class="row"><span class="pos">major positive</span><span id="vPos">–</span></div>
+        <div class="row"><span class="neg">major negative</span><span id="vNeg">–</span></div>
+        <div class="row"><span>net gex</span><span id="vNet">–</span></div>
+      </div>
+      <div class="sec"><b>open interest</b>
+        <div class="row"><span class="zero">zero gamma</span><span id="oZero">–</span></div>
+        <div class="row"><span class="pos">major positive</span><span id="oPos">–</span></div>
+        <div class="row"><span class="neg">major negative</span><span id="oNeg">–</span></div>
+        <div class="row"><span>net gex</span><span id="oNet">–</span></div>
+      </div>
+      <div class="sec"><b>max change gex <span class="muted" style="font-weight:400">(volume)</span></b>
+        <table class="mc"><tbody id="mcBody"></tbody></table>
+      </div>
+      <div class="sec">
+        <b>history <span class="muted" style="font-weight:400" id="hCount">0 snapshots</span></b>
+        <div class="stack"><button id="hLoad" class="primary">load snapshots (CSV/JSON, multi-select)</button><button id="hClear">clear history</button></div>
+        <input id="hFile" type="file" multiple accept=".csv,.json,.txt" class="hidden">
+        <div class="play"><button id="pPlay">▶</button><select id="pSpeed"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option></select><span id="pTime" class="small muted">–</span></div>
+        <input id="pSlider" type="range" min="0" max="0" value="0" style="width:100%">
+      </div>
+    </aside>
+  </div>
+  <div class="panel"><h2>Volatility smile &amp; volume curve · <select id="smExp"></select> <span class="muted small" id="smNote"></span></h2><div id="smileChart" class="chart short"></div></div>
+</section>
+
+<div id="empty" class="panel">Load a chain to see levels. Try the synthetic demo to explore the interface first.</div>
+
+<section id="out" class="grid hidden" data-view="analytics">
+  <div id="cards" class="grid"></div>
+
+  <div class="grid two">
+    <div class="panel"><h2>Net GEX by strike · OI vs Volume ($M per 1% move)</h2><div id="barChart" class="chart"></div></div>
+    <div class="panel"><h2>Gamma profile · total OI GEX vs hypothetical spot</h2><div id="profChart" class="chart"></div></div>
+  </div>
+
+  <div class="grid two">
+    <div class="panel"><h2>3D dealer gamma surface · strike × days to expiry</h2><div id="gexSurf" class="chart"></div></div>
+    <div class="panel"><h2>Implied volatility surface (OTM, OI-weighted)</h2><div id="ivSurf" class="chart"></div></div>
+  </div>
+
+  <div class="grid two">
+    <div class="panel"><h2>Open interest by strike · calls vs puts</h2><div id="oiChart" class="chart short"></div></div>
+    <div class="panel"><h2>Levels table</h2><div id="levels"></div></div>
+  </div>
+</section>
+
+<section class="panel explain">
+  <h2>Method · what each number means</h2>
+  <details open><summary>GEX, the sign convention, and units</summary>
+    <p>For every contract: <code>GEX = Γ × OI × 100 × S² × 0.01</code>. That is the dollar amount of the underlying that dealers must buy or sell for a 1% move in spot. Γ is recomputed with Black-Scholes from Cboe's implied vol at the current spot (falling back to Cboe's own gamma if IV is missing).</p>
+    <p>The <b>naive dealer convention</b> is used, as in GexBot Classic: customers are assumed to buy calls and sell puts. So dealers are long call gamma (+) and short put gamma (−). Positive net GEX means dealers hedge against the move (selling rallies, buying dips), which damps volatility. Negative net GEX means they hedge with the move, which amplifies it. This convention is a simplification: real positioning is not observable from public data.</p>
+    <p><b>Vol GEX</b> swaps OI for today's traded volume. It shows where today's flow is concentrated, which matters most for 0DTE. <b>Stable / Unstable</b>: if OI GEX and Vol GEX have the same sign, the day's flow agrees with the standing positioning.</p>
+  </details>
+  <details><summary>Zero gamma, majors, and the other levels</summary>
+    <p><b>Zero gamma</b> follows GexBot Classic's documented method: a natural cubic spline is fitted through the per-strike net GEX bars (by volume; by OI when there is no volume yet) and its zero crossing between the Major Negative and Major Positive strikes is reported. <b>Profile flip</b> is a second, independent measure: total OI GEX recomputed at hypothetical spot prices (±25%), crossing nearest spot. Above it dealers are modelled net long gamma, below it net short.</p>
+    <p><b>Major +1/+2</b>: strikes with the largest positive net GEX (call walls, which often act as resistance or magnets). <b>Major −1/−2</b>: the largest negative net GEX (put walls, often support that can break into acceleration). Both are shown for OI and for volume, like GexBot's <code>major_pos_oi</code>, <code>major_neg_oi</code>, <code>major_pos_vol</code>, <code>major_neg_vol</code>.</p>
+    <p><b>25Δ risk reversal</b>: IV of the 25-delta call minus IV of the 25-delta put on the nearest expiry in scope. Negative means puts are bid (normal equity skew); a rising RR signals put demand fading. <b>DEX</b>: net delta exposure of the selected contracts, in $ of underlying. <b>P/C</b>: put/call ratios by OI and by volume.</p>
+    <p><b>Futures conversion</b>: enter the live futures price. For an index (SPX→ES, NDX→NQ) the additive basis (futures − index) is added to every level. For an ETF whose price is far from the futures (GLD→GC, SPY→ES, QQQ→NQ) every level is multiplied by the ratio futures ÷ ETF price instead.</p>
+  </details>
+  <details><summary>Limits</summary>
+    <p>Cboe's free chain is 15-minute delayed; OI is end-of-previous-day. GexBot uses intraday data feeds and proprietary adjustments, so values will not match exactly. This tool is for research and education, not trading advice.</p>
+  </details>
+</section>
+</main>
+<footer>Open GEX Terminal · research and education only, not financial advice · data: Cboe delayed quotes (15 min), OI from the prior close.</footer>
+
+<script type="application/json" id="gldSnap">null</script>
+<script>
+// ===== GEX core: parsing + math (no DOM) =====
+const GEX = (() => {
+  const SQ2PI = Math.sqrt(2 * Math.PI);
+  const npdf = x => Math.exp(-0.5 * x * x) / SQ2PI;
+  function ncdf(x) { // Abramowitz-Stegun
+    const t = 1 / (1 + 0.2316419 * Math.abs(x));
+    const d = 0.3989423 * Math.exp(-x * x / 2);
+    const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    return x > 0 ? 1 - p : p;
+  }
+  function bsGamma(S, K, T, sig, r, q) {
+    if (!(S > 0 && K > 0 && T > 0 && sig > 0)) return 0;
+    const st = sig * Math.sqrt(T);
+    const d1 = (Math.log(S / K) + (r - q + 0.5 * sig * sig) * T) / st;
+    return Math.exp(-q * T) * npdf(d1) / (S * st);
+  }
+  function bsDelta(S, K, T, sig, r, q, type) {
+    if (!(S > 0 && K > 0 && T > 0 && sig > 0)) return 0;
+    const st = sig * Math.sqrt(T);
+    const d1 = (Math.log(S / K) + (r - q + 0.5 * sig * sig) * T) / st;
+    const e = Math.exp(-q * T);
+    return type === 'C' ? e * ncdf(d1) : e * (ncdf(d1) - 1);
+  }
+
+  // ---------- parsing ----------
+  const SYM = /^([A-Z.]+?)(\d{6})([CP])(\d{8})$/;
+  function parseSym(s) {
+    const m = String(s || '').trim().toUpperCase().replace(/\s+/g, '').match(SYM);
+    if (!m) return null;
+    const e = m[2];
+    return { root: m[1], exp: `20${e.slice(0, 2)}-${e.slice(2, 4)}-${e.slice(4, 6)}`, type: m[3], K: +m[4] / 1000 };
+  }
+  function splitCSV(line) {
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true; else if (c === ',') { out.push(cur); cur = ''; } else cur += c;
+    }
+    out.push(cur); return out.map(x => x.trim());
+  }
+  const num = v => { const x = parseFloat(String(v ?? '').replace(/[,$%]/g, '')); return isFinite(x) ? x : 0; };
+  const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  function parseDateText(s) { // "November 20, 2026 at 4:15 PM EST" or "Fri Nov 20 2026"
+    const m = String(s).match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})(?:\s+at\s+(\d{1,2}):(\d{2})\s*([AP]M))?/);
+    if (!m || !(m[1].toLowerCase() in MONTHS)) return null;
+    let h = 16, mi = 0;
+    if (m[4]) { h = +m[4] % 12 + (m[6] === 'PM' ? 12 : 0); mi = +m[5]; }
+    return { y: +m[3], mo: MONTHS[m[1].toLowerCase()], d: +m[2], h, mi };
+  }
+  // ET wall-clock -> epoch ms (handles US DST)
+  function etToMs(y, mo, d, h, mi) {
+    const dstStart = nthSunday(y, 2, 2), dstEnd = nthSunday(y, 10, 1); // 2nd Sun Mar, 1st Sun Nov
+    const dayNum = Date.UTC(y, mo, d);
+    const off = (dayNum >= dstStart && dayNum < dstEnd) ? 4 : 5;
+    return Date.UTC(y, mo, d, h + off, mi);
+  }
+  function nthSunday(y, mo, n) { const first = new Date(Date.UTC(y, mo, 1)).getUTCDay(); return Date.UTC(y, mo, 1 + ((7 - first) % 7) + 7 * (n - 1)); }
+  const expiryMs = iso => { const [y, m, d] = iso.split('-').map(Number); return etToMs(y, m - 1, d, 16, 0); };
+
+  function parseCboeJSON(obj) {
+    const d = obj.data || obj;
+    if (!d || !Array.isArray(d.options)) throw new Error('JSON has no data.options array');
+    const rows = [];
+    for (const o of d.options) {
+      const p = parseSym(o.option); if (!p) continue;
+      rows.push({ ...p, oi: num(o.open_interest), vol: num(o.volume), iv: num(o.iv), gamma: num(o.gamma), delta: num(o.delta) });
+    }
+    let asOf = null;
+    if (obj.timestamp) { // Cboe timestamps are US Eastern
+      const m = String(obj.timestamp).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+      if (m) asOf = etToMs(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    }
+    const sym = String(d.symbol || '').replace(/^_/, '');
+    return { symbol: (sym || (rows[0] && rows[0].root) || '?').replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/,'$1'), spot: num(d.current_price) || num(d.close), asOf, rows };
+  }
+
+  function parseCboeCSV(text) {
+    const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim().length);
+    let spot = 0, asOf = null, symbol = '';
+    const hi = lines.findIndex(l => /strike/i.test(l) && /(open interest|open int|\bint\b|oi)/i.test(l));
+    if (hi < 0) throw new Error('Could not find a header row with Strike and Open Interest columns');
+    for (const l of lines.slice(0, hi)) {
+      const ms = l.match(/Last:\s*([\d,]+\.?\d*)/i); if (ms) spot = num(ms[1]);
+      if (!symbol) { const c = splitCSV(l)[0]; if (c && !/^date/i.test(c)) symbol = c.replace(/^"|"$/g, ''); }
+      const md = l.match(/Date:\s*([^,]+(?:,\s*\d{4})?[^,]*)/i);
+      if (md) { const p = parseDateText(md[1]); if (p) asOf = etToMs(p.y, p.mo, p.d, p.h, p.mi); }
+    }
+    const H = splitCSV(lines[hi]).map(h => h.toLowerCase());
+    const idxAll = re => H.map((h, i) => re.test(h) ? i : -1).filter(i => i >= 0);
+    const strikeI = H.findIndex(h => /^strike/.test(h));
+    const expI = H.findIndex(h => /expir/.test(h));
+    const twoSided = idxAll(/^(volume|vol)$/).length >= 2;
+    const rows = [];
+    const pick = (cells, list, side) => list.length ? num(cells[list[Math.min(side, list.length - 1)]]) : 0;
+    const vI = idxAll(/^(volume|vol)$/), ivI = idxAll(/^iv$|implied/), dI = idxAll(/^delta$/), gI = idxAll(/^gamma$/), oiI = idxAll(/open int|^int$|^oi$/);
+    const symCols = idxAll(/^(calls|puts|symbol|option|contract)$/);
+    const typeI = H.findIndex(h => /^(type|call\/put|put\/call|cp)$/.test(h));
+    for (const l of lines.slice(hi + 1)) {
+      const c = splitCSV(l); if (c.length < 4) continue;
+      if (twoSided) {
+        for (const [side, type] of [[0, 'C'], [1, 'P']]) {
+          let p = symCols.length > side ? parseSym(c[symCols[side]]) : null;
+          if (!p) {
+            const K = num(c[strikeI]); const e = expI >= 0 ? parseDateText(c[expI]) : null; if (!K || !e) continue;
+            p = { root: symbol, exp: `${e.y}-${String(e.mo + 1).padStart(2, '0')}-${String(e.d).padStart(2, '0')}`, type, K };
+          }
+          rows.push({ ...p, oi: pick(c, oiI, side), vol: pick(c, vI, side), iv: pick(c, ivI, side), gamma: pick(c, gI, side), delta: pick(c, dI, side) });
+        }
+      } else {
+        let p = symCols.length ? parseSym(c[symCols[0]]) : null;
+        if (!p) {
+          const K = num(c[strikeI]); const e = expI >= 0 ? parseDateText(c[expI]) || (() => { const m = String(c[expI]).match(/(\d{4})-(\d{2})-(\d{2})/); return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null; })() : null;
+          const t = typeI >= 0 ? (String(c[typeI]).trim().toUpperCase()[0]) : null;
+          if (!K || !e || !(t === 'C' || t === 'P')) continue;
+          p = { root: symbol, exp: `${e.y}-${String(e.mo + 1).padStart(2, '0')}-${String(e.d).padStart(2, '0')}`, type: t, K };
+        }
+        rows.push({ ...p, oi: pick(c, oiI, 0), vol: pick(c, vI, 0), iv: pick(c, ivI, 0), gamma: pick(c, gI, 0), delta: pick(c, dI, 0) });
+      }
+    }
+    const root=(rows[0]&&rows[0].root)||symbol.split(/[ (]/)[0]||'?';
+    return { symbol: root.replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/,'$1'), spot, asOf, rows };
+  }
+
+  function parseAny(text) {
+    const t = text.trim();
+    if (t.startsWith('{') || t.startsWith('[')) return parseCboeJSON(JSON.parse(t));
+    return parseCboeCSV(text);
+  }
+
+  // ---------- model ----------
+  // opts: {spot, asOf(ms), r, q, scope:'zero'|'one'|'full'|'custom', maxDays, rangePct}
+  function prepare(chain, opts) {
+    const S = opts.spot || chain.spot;
+    const asOf = opts.asOf || chain.asOf || Date.now();
+    const minT = 1 / (365 * 24 * 4); // 15 minutes floor
+    const exps = [...new Set(chain.rows.map(r => r.exp))].filter(e => expiryMs(e) > asOf).sort();
+    const contracts = [];
+    for (const r of chain.rows) {
+      const ems = expiryMs(r.exp); if (ems <= asOf) continue;
+      if (!(r.oi > 0 || r.vol > 0)) continue;
+      const T = Math.max((ems - asOf) / (365 * 864e5), minT);
+      let iv = r.iv > 3 ? r.iv / 100 : r.iv; // accept 25 or 0.25
+      contracts.push({ ...r, iv, T, dte: (ems - asOf) / 864e5 });
+    }
+    return { S, asOf, exps, contracts, symbol: chain.symbol };
+  }
+
+  function inScope(m, c, opts) {
+    const i = m.exps.indexOf(c.exp);
+    if (opts.scope === 'zero') return i === 0;
+    if (opts.scope === 'one') return i === 1;
+    if (opts.scope === 'custom') return c.dte <= (opts.maxDays || 30);
+    return true; // full
+  }
+
+  function gammaAt(c, S, r, q) {
+    if (c.iv > 0.005) return bsGamma(S, c.K, c.T, c.iv, r, q);
+    return c.gamma > 0 ? c.gamma : 0; // fall back to vendor gamma when IV missing
+  }
+
+
+  // natural cubic spline through (xs, ys)
+  function spline(xs, ys) {
+    const n = xs.length, h = [], a = [], l = [1], mu = [0], z = [0], c = new Array(n).fill(0), b = [], d = [];
+    for (let i = 0; i < n - 1; i++) h[i] = xs[i + 1] - xs[i];
+    for (let i = 1; i < n - 1; i++) a[i] = 3 / h[i] * (ys[i + 1] - ys[i]) - 3 / h[i - 1] * (ys[i] - ys[i - 1]);
+    for (let i = 1; i < n - 1; i++) { l[i] = 2 * (xs[i + 1] - xs[i - 1]) - h[i - 1] * mu[i - 1]; mu[i] = h[i] / l[i]; z[i] = (a[i] - h[i - 1] * z[i - 1]) / l[i]; }
+    for (let j = n - 2; j >= 0; j--) { c[j] = z[j] - mu[j] * c[j + 1]; b[j] = (ys[j + 1] - ys[j]) / h[j] - h[j] * (c[j + 1] + 2 * c[j]) / 3; d[j] = (c[j + 1] - c[j]) / (3 * h[j]); }
+    return x => { let i = 0; while (i < n - 2 && x > xs[i + 1]) i++; const t = x - xs[i]; return ys[i] + b[i] * t + c[i] * t * t + d[i] * t * t * t; };
+  }
+  // GexBot-style zero gamma: spline zero crossing searched between the major negative and major positive strikes (nearest spot)
+  function zeroBetween(ks, vals, k1, k2, S) {
+    if (k1 == null || k2 == null || ks.length < 4 || !vals.some(v => v)) return null;
+    const f = spline(ks, vals), lo = Math.min(k1, k2), hi = Math.max(k1, k2), N = 600; let best = null, px = lo, py = f(lo);
+    for (let i = 1; i <= N; i++) { const x = lo + (hi - lo) * i / N, y = f(x); if ((py <= 0) !== (y <= 0)) { const zx = px + (x - px) * py / (py - y); if (best == null || Math.abs(zx - S) < Math.abs(best - S)) best = zx; } px = x; py = y; }
+    return best;
+  }
+
+  function strikeStep(strikes) {
+    const s = [...new Set(strikes)].sort((a, b) => a - b); const diffs = {};
+    for (let i = 1; i < s.length; i++) { const d = +(s[i] - s[i - 1]).toFixed(4); if (d > 0) diffs[d] = (diffs[d] || 0) + 1; }
+    let best = 1, n = -1; for (const [d, k] of Object.entries(diffs)) if (k > n) { n = k; best = +d; }
+    return best;
+  }
+
+  function compute(chain, opts) {
+    const r = opts.r ?? 0.04, q = opts.q ?? 0.012;
+    const m = prepare(chain, opts); const S = m.S;
+    if (!(S > 0)) throw new Error('Spot price unknown: enter it in the Spot box');
+    const lo = S * (1 - opts.rangePct / 100), hi = S * (1 + opts.rangePct / 100);
+    const sel = m.contracts.filter(c => inScope(m, c, opts));
+    const byK = new Map();
+    let sumOI = 0, sumVol = 0, dexOI = 0, callOI = 0, putOI = 0, callVol = 0, putVol = 0;
+    const unit = S * S * 0.01 * 100; // $ per 1% move, per (gamma*contract)
+    for (const c of sel) {
+      const g = gammaAt(c, S, r, q); const sgn = c.type === 'C' ? 1 : -1;
+      const gOI = sgn * g * c.oi * unit, gV = sgn * g * c.vol * unit;
+      sumOI += gOI; sumVol += gV;
+      const dl = c.iv > 0.005 ? bsDelta(S, c.K, c.T, c.iv, r, q, c.type) : c.delta;
+      dexOI += dl * c.oi * 100 * S;
+      if (c.type === 'C') { callOI += c.oi; callVol += c.vol; } else { putOI += c.oi; putVol += c.vol; }
+      if (c.K < lo || c.K > hi) continue;
+      const e = byK.get(c.K) || { K: c.K, oi: 0, vol: 0, callOI: 0, putOI: 0, callGex: 0, putGex: 0 };
+      e.oi += gOI; e.vol += gV; if (c.type === 'C') { e.callOI += c.oi; e.callGex += gOI; } else { e.putOI += c.oi; e.putGex += gOI; }
+      byK.set(c.K, e);
+    }
+    const strikes = [...byK.values()].sort((a, b) => a.K - b.K);
+    const top = (key, dir, n) => strikes.filter(s => dir > 0 ? s[key] > 0 : s[key] < 0).sort((a, b) => dir > 0 ? b[key] - a[key] : a[key] - b[key]).slice(0, n).map(s => s.K);
+    const majors = { posOI: top('oi', 1, 3), negOI: top('oi', -1, 3), posVol: top('vol', 1, 3), negVol: top('vol', -1, 3) };
+    const ksArr = strikes.map(s => s.K);
+    const zeroG = { oi: zeroBetween(ksArr, strikes.map(s => s.oi), majors.negOI[0], majors.posOI[0], S), vol: zeroBetween(ksArr, strikes.map(s => s.vol), majors.negVol[0], majors.posVol[0], S) };
+
+    // gamma profile vs hypothetical spot (all selected contracts, OI)
+    const live = sel.filter(c => c.iv > 0.005);
+    const totAt = (x, key = 'oi') => { let tot = 0; for (const c of live) { const w = c[key]; if (!w) continue; tot += (c.type === 'C' ? 1 : -1) * bsGamma(x, c.K, c.T, c.iv, r, q) * w * 100 * x * x * 0.01; } return tot; };
+    const lite = !!opts.lite;
+    const N = lite ? 0 : 121, span = Math.max(opts.rangePct, 3) / 100;
+    const prof = [];
+    for (let i = 0; i < N; i++) { const x = S * (1 - span + 2 * span * i / (N - 1)); prof.push([x, totAt(x)]); }
+    // zero gamma: search a wide band so the flip is found even when it sits outside the chart range
+    const findZero = key => {
+      const ZN = lite ? 41 : 101, zs = lite ? 0.15 : 0.25, grid = [];
+      for (let i = 0; i < ZN; i++) { const x = S * (1 - zs + 2 * zs * i / (ZN - 1)); grid.push([x, totAt(x, key)]); }
+      let z0 = null, bestD = Infinity;
+      for (let i = 1; i < ZN; i++) {
+        let [x0, y0] = grid[i - 1], [x1, y1] = grid[i];
+        if ((y0 <= 0 && y1 > 0) || (y0 >= 0 && y1 < 0)) {
+          for (let k = 0; k < (lite ? 12 : 18); k++) { const xm = (x0 + x1) / 2, ym = totAt(xm, key); if ((ym <= 0) === (y0 <= 0)) { x0 = xm; y0 = ym; } else { x1 = xm; y1 = ym; } }
+          const z = (x0 + x1) / 2; if (Math.abs(z - S) < bestD) { bestD = Math.abs(z - S); z0 = z; }
+        }
+      }
+      return z0;
+    };
+    const zero = findZero('oi');
+    const zeroVol = opts.noVolZero ? null : findZero('vol');
+    // 25-delta risk reversal on first expiry in scope
+    let rr = null; const firstExp = [...new Set(sel.map(c => c.exp))].sort()[0];
+    if (firstExp) {
+      const pickIV = type => { let best = null, bd = 9; for (const c of sel) { if (c.exp !== firstExp || c.type !== type || !(c.iv > 0.005)) continue; const dl = Math.abs(bsDelta(S, c.K, c.T, c.iv, r, q, type)); const d = Math.abs(dl - 0.25); if (d < bd) { bd = d; best = c.iv; } } return best; };
+      const ci = pickIV('C'), pi = pickIV('P'); if (ci != null && pi != null) rr = ci - pi;
+    }
+    return { S, asOf: m.asOf, symbol: m.symbol, exps: m.exps, scopeExps: [...new Set(sel.map(c => c.exp))].sort(), nSel: sel.length, nAll: m.contracts.length,
+      strikes, majors, sumOI, sumVol, dexOI, zero, zeroVol, zeroG, prof, rr, stable: Math.sign(sumOI) === Math.sign(sumVol), pcrOI: callOI ? putOI / callOI : null, pcrVol: callVol ? putVol / callVol : null, step: strikeStep(strikes.map(s => s.K)) };
+  }
+
+  // surfaces across expiries (independent of scope): maxDays, rangePct, bins
+  function surfaces(chain, opts) {
+    const r = opts.r ?? 0.04, q = opts.q ?? 0.012;
+    const m = prepare(chain, opts); const S = m.S;
+    const lo = S * (1 - opts.rangePct / 100), hi = S * (1 + opts.rangePct / 100);
+    const cs = m.contracts.filter(c => c.dte <= opts.maxDays && c.K >= lo && c.K <= hi);
+    const exps = [...new Set(cs.map(c => c.exp))].sort();
+    let w = opts.binWidth;
+    if (!w) { const raw = (hi - lo) / 40; const p = Math.pow(10, Math.floor(Math.log10(raw))); w = [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= raw) || 10 * p; }
+    const k0 = Math.ceil(lo / w) * w; const ks = []; for (let k = k0; k <= hi + 1e-9; k += w) ks.push(+k.toFixed(6));
+    const gex = exps.map(() => ks.map(() => 0));
+    const ivS = exps.map(() => ks.map(() => [0, 0]));
+    const unit = S * S * 0.01 * 100;
+    for (const c of cs) {
+      const i = exps.indexOf(c.exp); const j = Math.min(ks.length - 1, Math.max(0, Math.round((c.K - k0) / w)));
+      gex[i][j] += (c.type === 'C' ? 1 : -1) * gammaAt(c, S, r, q) * c.oi * unit;
+      const otm = (c.type === 'P' && c.K <= S) || (c.type === 'C' && c.K >= S);
+      if (otm && c.iv > 0.005 && c.iv < 3) { const wt = 1 + c.oi + c.vol; ivS[i][j][0] += c.iv * wt; ivS[i][j][1] += wt; }
+    }
+    const iv = ivS.map(row => {
+      const v = row.map(([a, b]) => b > 0 ? a / b : null);
+      // fill gaps by linear interpolation along strike
+      const idx = v.map((x, k) => x == null ? -1 : k).filter(k => k >= 0);
+      if (!idx.length) return v;
+      return v.map((x, k) => {
+        if (x != null) return x;
+        const L = idx.filter(t => t < k).pop(), R = idx.find(t => t > k);
+        if (L == null) return v[R]; if (R == null) return v[L];
+        return v[L] + (v[R] - v[L]) * (k - L) / (R - L);
+      });
+    });
+    const dtes = exps.map(e => +(((expiryMs(e) - m.asOf) / 864e5)).toFixed(2));
+    return { exps, dtes, strikes: ks, gex, iv, width: w, S };
+  }
+
+  return { parseAny, parseCboeCSV, parseCboeJSON, compute, surfaces, bsGamma, bsDelta, expiryMs, etToMs };
+})();
+if (typeof module !== 'undefined') module.exports = GEX;
+
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = { snaps: [], idx: 0, view: 'classic', scope: 'full', futMode: false, last: null, cache: new Map(), playT: null };
+  // chart palettes for the light (default) and dark themes
+  const PAL = {
+    light: { pos: '#16a34a', neg: '#dc2626', acc: '#2563eb', zero: '#d97706', mut: '#6b7280', grid: '#eef0f3', txt: '#111827', vol: '#7c3aed', price: '#0891b2', zl: '#cbd5e1',
+      posSoft: 'rgba(22,163,74,.30)', negSoft: 'rgba(220,38,38,.30)', posFill: 'rgba(22,163,74,.12)', negFill: 'rgba(220,38,38,.12)', prev: '#2563eb', negLine: '#b91c1c',
+      posTag: '#16a34a', posTagTxt: '#fff', negTag: '#dc2626', negTagTxt: '#fff', zeroTagTxt: '#fff', priceTagTxt: '#fff', oiPos: '#15803d', oiNeg: '#b91c1c', smile0: '#9ca3af', mid: '#f1f5f9', font: 'Inter, ui-sans-serif, system-ui, sans-serif' },
+    dark: { pos: '#22c55e', neg: '#ef4444', acc: '#60a5fa', zero: '#f59e0b', mut: '#8b95a5', grid: '#1f2733', txt: '#e5e7eb', vol: '#a78bfa', price: '#22d3ee', zl: '#475569',
+      posSoft: 'rgba(34,197,94,.40)', negSoft: 'rgba(239,68,68,.40)', posFill: 'rgba(34,197,94,.16)', negFill: 'rgba(239,68,68,.16)', prev: '#60a5fa', negLine: '#ef4444',
+      posTag: '#4ade80', posTagTxt: '#052e16', negTag: '#b91c1c', negTagTxt: '#fff', zeroTagTxt: '#1c1917', priceTagTxt: '#042f2e', oiPos: '#4ade80', oiNeg: '#f87171', smile0: '#94a3b8', mid: '#1e293b', font: 'Inter, ui-sans-serif, system-ui, sans-serif' }
+  };
+  let theme = 'light'; try { theme = localStorage.getItem('gexTheme') || 'light'; } catch (e) { }
+  const C = { ...PAL[theme] };
+  document.documentElement.dataset.theme = theme;
+  const baseLayout = () => ({
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: C.txt, family: C.font, size: 12 },
+    margin: { l: 60, r: 20, t: 10, b: 45 }, hovermode: 'closest',
+    xaxis: { gridcolor: C.grid, zerolinecolor: C.zl, linecolor: C.zl }, yaxis: { gridcolor: C.grid, zerolinecolor: C.zl, linecolor: C.zl },
+    legend: { orientation: 'h', y: 1.02, x: 0, bgcolor: 'rgba(0,0,0,0)' }
+  });
+  const cfg = { displaylogo: false, responsive: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'] };
+
+  const msg = (t, cls = 'muted') => { const m = $('msg'); m.className = cls; m.textContent = t; };
+  const fmtB = v => (v == null || !isFinite(v)) ? '–' : (Math.abs(v) >= 1e9 ? (v / 1e9).toFixed(2) + 'B' : (v / 1e6).toFixed(0) + 'M');
+  const fmtK = k => k == null ? '–' : (+k).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const cur = () => state.snaps[state.idx];
+  // futures basis: entered futures price minus the latest snapshot's spot
+  const basis = () => { const f = parseFloat($('fut').value); const L = state.snaps[state.snaps.length - 1]; const S = L && L.chain.spot; return (f > 0 && S > 0) ? f - S : null; };
+  // futures conversion: additive basis when futures ≈ underlying (SPX→ES, NDX→NQ); a price ratio when they differ a lot (GLD→GC, SPY→ES, QQQ→NQ)
+  const convInfo = () => { const f = parseFloat($('fut').value); const L = state.snaps[state.snaps.length - 1]; const S = L && L.chain.spot; if (!(f > 0 && S > 0)) return null; const ratio = f / S; return { mult: ratio < 0.8 || ratio > 1.25, ratio, b: f - S }; };
+  const conv = k => { const c = convInfo(); if (k == null || !c) return null; return c.mult ? k * c.ratio : k + c.b; };
+  const roundF = v => { const c = convInfo(); return c && c.mult ? Math.round(v * 10) / 10 : Math.round(v * 4) / 4; };
+  const convLabel = () => { const c = convInfo(); return !c ? '' : (c.mult ? '×' + c.ratio.toFixed(4) : 'basis ' + c.b.toFixed(2)); };
+  const fut = conv;
+  const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+  const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const toET = ms => { const p = Object.fromEntries(etFmt.formatToParts(new Date(ms)).map(x => [x.type, x.value])); return `${p.year}-${p.month}-${p.day} ${p.hour === '24' ? '00' : p.hour}:${p.minute}:${p.second}`; };
+
+  // ---------- loading ----------
+  // keep the chain light enough to hold many intraday snapshots: <=120 DTE, strikes within ±30% of spot
+  function prune(ch) {
+    const S = ch.spot, a = ch.asOf || Date.now();
+    if (!(S > 0)) return ch;
+    const lim = a + 120 * 864e5;
+    ch.rows = ch.rows.filter(r => r.K >= S * 0.7 && r.K <= S * 1.3 && GEX.expiryMs(r.exp) <= lim);
+    return ch;
+  }
+  function addSnap(ch) {
+    const i = state.snaps.findIndex(s => s.asOf === ch.asOf);
+    const snap = { asOf: ch.asOf, chain: ch };
+    if (i >= 0) state.snaps[i] = snap; else state.snaps.push(snap);
+  }
+  async function ingestFiles(files) {
+    const follow = state.idx >= state.snaps.length - 1;
+    let ok = 0, bad = [];
+    for (const f of files) {
+      try {
+        const ch = GEX.parseAny(await f.text());
+        if (!ch.rows.length) throw new Error('no option rows');
+        if (!ch.asOf) ch.asOf = f.lastModified || Date.now();
+        if (!ch.spot) throw new Error('no spot price found');
+        const sym = (state.snaps[0] && state.snaps[0].chain.symbol) || ch.symbol;
+        if (state.snaps.length && ch.symbol && sym && ch.symbol !== sym) throw new Error(`symbol ${ch.symbol} differs from loaded ${sym}; clear history first`);
+        addSnap(prune(ch)); ok++;
+      } catch (e) { bad.push(`${f.name}: ${e.message}`); }
+    }
+    state.snaps.sort((a, b) => a.asOf - b.asOf); state.cache.clear();
+    if (follow || ok) state.idx = state.snaps.length - 1;
+    if (ok) msg(`Added ${ok} snapshot${ok > 1 ? 's' : ''} · ${state.snaps.length} in history · ${cur().chain.symbol || ''} spot ${cur().chain.spot.toFixed(2)}` + (bad.length ? ` · skipped: ${bad.join('; ')}` : ''), bad.length ? 'warn' : 'pos');
+    else msg('Could not load: ' + bad.join('; '), 'neg');
+    run();
+  }
+  function ingestText(text) {
+    try {
+      const ch = GEX.parseAny(text); if (!ch.rows.length) throw new Error('No option rows recognised');
+      if (!ch.asOf) ch.asOf = Date.now(); if (!ch.spot) throw new Error('No spot price in the text');
+      addSnap(prune(ch)); state.snaps.sort((a, b) => a.asOf - b.asOf); state.cache.clear(); state.idx = state.snaps.length - 1;
+      msg(`Added pasted snapshot · ${state.snaps.length} in history`, 'pos'); run();
+    } catch (e) { msg('Could not parse: ' + e.message, 'neg'); }
+  }
+  const drop = $('drop'), file = $('file');
+  drop.onclick = () => file.click();
+  file.onchange = () => { if (file.files.length) ingestFiles([...file.files]); file.value = ''; };
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hover'); }));
+  drop.addEventListener('drop', e => { const fs = [...e.dataTransfer.files]; if (fs.length) ingestFiles(fs); });
+  $('hLoad').onclick = () => $('hFile').click();
+  $('hFile').onchange = () => { if ($('hFile').files.length) ingestFiles([...$('hFile').files]); $('hFile').value = ''; };
+  $('hClear').onclick = () => { stopPlay(); state.snaps = []; state.idx = 0; state.cache.clear(); $('classicWrap').classList.add('hidden'); $('out').classList.add('hidden'); $('empty').classList.remove('hidden'); $('stamp').textContent = 'No data loaded'; msg('History cleared.'); };
+  $('pasteToggle').onclick = () => $('pasteBox').classList.toggle('hidden');
+  $('pasteGo').onclick = () => ingestText($('pasteTxt').value);
+  $('demoBtn').onclick = () => {
+    stopPlay(); state.snaps = []; state.cache.clear();
+    demoSession().forEach(addSnap); state.idx = state.snaps.length - 1;
+    msg('Synthetic demo session loaded (38 snapshots, 10 min apart). Made-up numbers for exploring the interface, not market data.', 'warn'); run();
+  };
+
+  // ---------- gold mode: GLD options converted to GC futures by price ratio ----------
+  $('goldBtn').onclick = () => {
+    stopPlay();
+    const haveGLD = state.snaps.length && /^GLD/i.test(cur().chain.symbol || '');
+    const s = JSON.parse(($('gldSnap') && $('gldSnap').textContent.trim()) || 'null');
+    if (!haveGLD && !s) { msg('Gold mode: first download GLD\'s option chain from Cboe (GLD → Options → Download CSV) and drop it in, then enter the GC futures price at that moment in Settings → "Futures price" and click Gold mode again.', 'warn'); return; }
+    if (!haveGLD) {
+      const [Y, M, D, hh, mi] = s.ts.match(/(\d+)-(\d+)-(\d+) (\d+):(\d+)/).slice(1).map(Number);
+      const iso = e => `20${e.slice(0, 2)}-${e.slice(2, 4)}-${e.slice(4, 6)}`;
+      const ch = { symbol: 'GLD', spot: s.spot, asOf: GEX.etToMs(Y, M - 1, D, hh, mi), rows: s.rows.map(r => ({ root: 'GLD', exp: iso(s.exps[r[0]]), K: r[1], type: r[2] ? 'C' : 'P', oi: r[3], vol: r[4], iv: r[5], gamma: 0, delta: 0 })) };
+      state.snaps = []; state.cache.clear(); addSnap(ch); state.idx = 0;
+      $('fut').value = s.gc;
+      msg(`Gold mode: embedded GLD snapshot (Cboe data as of ${s.ts} ET, Friday's close $${s.spot}) with GC at ${s.gc} (${s.gcLabel}). For fresh levels, download GLD's chain from Cboe, drop it in, and enter the GC price at that moment.`, 'pos');
+    } else if (!(parseFloat($('fut').value) > 1000)) {
+      msg('Gold mode: enter the GC (gold futures) price at the time you downloaded this GLD file in Settings → "Futures price" to see GC levels.', 'warn');
+    } else msg('Gold mode on for your GLD file: levels × (GC ÷ GLD).', 'pos');
+    $('rangePct').value = 10; state.cache.clear();
+    state.futMode = !!convInfo();
+    $('cvFut').classList.toggle('on', state.futMode); $('cvSpot').classList.toggle('on', !state.futMode);
+    setScope('full');
+  };
+
+  const setThemeBtn = () => { $('themeBtn').textContent = theme === 'light' ? 'Dark mode' : 'Light mode'; };
+  setThemeBtn();
+  $('themeBtn').onclick = () => {
+    theme = theme === 'light' ? 'dark' : 'light'; try { localStorage.setItem('gexTheme', theme); } catch (e) { }
+    Object.assign(C, PAL[theme]); document.documentElement.dataset.theme = theme; setThemeBtn(); run();
+  };
+
+  // ---------- controls ----------
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => {
+    $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    state.view = b.dataset.v; run();
+  });
+  // one expiry scope shared by both views; the Settings bar and the Classic sidebar stay in sync
+  function setScope(v) {
+    state.scope = v;
+    $('scopeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
+    $('cScope').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
+    run();
+  }
+  $('scopeSeg').querySelectorAll('button').forEach(b => b.onclick = () => setScope(b.dataset.v));
+  $('cScope').querySelectorAll('button').forEach(b => b.onclick = () => setScope(b.dataset.v));
+  $('cvSpot').onclick = () => { state.futMode = false; $('cvSpot').classList.add('on'); $('cvFut').classList.remove('on'); run(); };
+  $('cvFut').onclick = () => {
+    if (basis() == null) { msg('Enter the current futures price in Settings → "Futures price" first (ES for SPX/SPY, NQ for NDX/QQQ, GC for GLD).', 'warn'); $('fut').focus(); return; }
+    state.futMode = true; $('cvFut').classList.add('on'); $('cvSpot').classList.remove('on'); run();
+  };
+  let t; ['maxDays', 'rangePct', 'spot', 'fut', 'rate', 'divq', 'surfDays'].forEach(id => $(id).addEventListener('input', () => {
+    clearTimeout(t); t = setTimeout(() => { if (['rangePct', 'rate', 'divq'].includes(id)) state.cache.clear(); if (id === 'fut' && basis() == null) { state.futMode = false; $('cvSpot').classList.add('on'); $('cvFut').classList.remove('on'); } run(); }, 250);
+  }));
+  $('smExp').onchange = () => smile();
+  $('pSlider').oninput = () => { stopPlay(); state.idx = +$('pSlider').value; run(); };
+  $('pPlay').onclick = () => {
+    if (state.playT) return stopPlay();
+    if (state.idx >= state.snaps.length - 1) state.idx = 0;
+    $('pPlay').textContent = '❚❚';
+    state.playT = setInterval(() => { if (state.idx >= state.snaps.length - 1) return stopPlay(); state.idx++; run(); }, 700 / (+$('pSpeed').value || 1));
+  };
+  function stopPlay() { clearInterval(state.playT); state.playT = null; $('pPlay').textContent = '▶'; }
+  $('copyBtn').onclick = () => {
+    if (!state.last) return;
+    const txt = levelsText(state.last);
+    navigator.clipboard.writeText(txt).then(() => { $('copyBtn').textContent = 'Copied ✓'; setTimeout(() => $('copyBtn').textContent = 'Copy levels', 1500); })
+      .catch(() => { $('pasteBox').classList.remove('hidden'); $('pasteTxt').value = txt; msg('Clipboard blocked. Levels placed in the text box below.', 'warn'); });
+  };
+
+  const common = () => ({ r: +$('rate').value || 0, q: +$('divq').value || 0, rangePct: Math.min(40, Math.max(1, +$('rangePct').value || 5)) });
+  function opts() {
+    const sp = parseFloat($('spot').value);
+    const o = { ...common(), spot: sp > 0 ? sp : undefined, scope: state.scope, maxDays: +$('maxDays').value || 30 };
+    if (o.scope === 'full') { o.scope = 'custom'; o.maxDays = 90; }
+    return o;
+  }
+
+  // ---------- main ----------
+  function run() {
+    if (!state.snaps.length) return;
+    state.idx = Math.max(0, Math.min(state.idx, state.snaps.length - 1));
+    $('empty').classList.add('hidden');
+    const S = cur().chain;
+    $('stamp').innerHTML = `${S.symbol || ''} · spot ${S.spot.toFixed(2)} · snapshot ${state.idx + 1}/${state.snaps.length}<br>as of ${toET(cur().asOf).slice(0, 16)} ET`;
+    $('classicWrap').classList.toggle('hidden', state.view !== 'classic');
+    $('out').classList.toggle('hidden', state.view !== 'analytics');
+    if (state.view === 'classic') runClassic(); else runAnalytics();
+  }
+  function runAnalytics() {
+    let R;
+    try { R = GEX.compute(cur().chain, opts()); } catch (e) { msg(e.message, 'neg'); return; }
+    if (!R.nSel) msg('No contracts in this scope. Try "Full" or a larger N days.', 'warn');
+    state.last = R;
+    cards(R); bars(R); profile(R); oiChart(R); levels(R);
+    const so = opts(); so.maxDays = +$('surfDays').value || 60; so.rangePct = Math.max(so.rangePct, 6);
+    try { surf(GEX.surfaces(cur().chain, so)); } catch (e) { console.warn(e); }
+  }
+
+  function card(k, v, s = '', c = '') { return `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${s}</div></div>`; }
+  function cards(R) {
+    const m = R.majors, f = k => { const x = fut(k); return x == null ? '' : 'fut ' + fmtK(roundF(x)); };
+    const zg = R.zeroG.vol ?? R.zeroG.oi;
+    const regime = R.zero == null ? (R.sumOI > 0 ? 'Long γ (no flip found)' : 'Short γ (no flip found)') : (R.S >= R.zero ? 'Above flip · long γ' : 'Below flip · short γ');
+    const zdist = zg == null ? '' : ((zg / R.S - 1) * 100).toFixed(2) + '% from spot';
+    const scopeTxt = R.scopeExps.length ? (R.scopeExps.length > 2 ? `${R.scopeExps[0]} … ${R.scopeExps[R.scopeExps.length - 1]} (${R.scopeExps.length})` : R.scopeExps.join(', ')) : 'none';
+    $('cards').innerHTML = [
+      card('Spot', fmtK(R.S.toFixed(2)), scopeTxt),
+      card('Zero gamma', zg == null ? '–' : fmtK(zg.toFixed(1)), [zdist, R.zeroG.vol != null && R.zeroG.oi != null ? 'OI: ' + fmtK(R.zeroG.oi.toFixed(1)) : (R.zeroG.vol == null ? 'from OI (no volume)' : ''), f(zg)].filter(Boolean).join(' · '), 'zero'),
+      card('Profile flip', R.zero == null ? '–' : fmtK(R.zero.toFixed(1)), 'GEX vs hypothetical spot', 'zero'),
+      card('Regime', `<span style="font:600 14px/1.35 var(--sans)">${regime}</span>`, '', R.zero == null ? cls(R.sumOI) : (R.S >= R.zero ? 'pos' : 'neg')),
+      card('Net GEX · OI', fmtB(R.sumOI), 'per 1% move', cls(R.sumOI)),
+      card('Net GEX · Vol', fmtB(R.sumVol), 'per 1% move', cls(R.sumVol)),
+      card('Flow vs OI', R.stable ? 'Stable' : 'Unstable', R.stable ? 'Vol & OI GEX agree' : 'Vol & OI GEX disagree', R.stable ? 'pos' : 'warn'),
+      card('Major +1 OI', fmtK(m.posOI[0]), [m.posOI[1] != null ? '+2: ' + fmtK(m.posOI[1]) : '', f(m.posOI[0])].filter(Boolean).join(' · '), 'pos'),
+      card('Major −1 OI', fmtK(m.negOI[0]), [m.negOI[1] != null ? '−2: ' + fmtK(m.negOI[1]) : '', f(m.negOI[0])].filter(Boolean).join(' · '), 'neg'),
+      card('Major +1 Vol', fmtK(m.posVol[0]), [m.posVol[1] != null ? '+2: ' + fmtK(m.posVol[1]) : '', f(m.posVol[0])].filter(Boolean).join(' · '), 'pos'),
+      card('Major −1 Vol', fmtK(m.negVol[0]), [m.negVol[1] != null ? '−2: ' + fmtK(m.negVol[1]) : '', f(m.negVol[0])].filter(Boolean).join(' · '), 'neg'),
+      card('25Δ risk reversal', R.rr == null ? '–' : (R.rr * 100).toFixed(2) + ' vol', 'call IV − put IV', cls(R.rr)),
+      card('DEX (delta $)', fmtB(R.dexOI), 'OI-weighted', cls(R.dexOI)),
+      card('Put/Call · OI', R.pcrOI == null ? '–' : R.pcrOI.toFixed(2), 'Vol: ' + (R.pcrVol == null ? '–' : R.pcrVol.toFixed(2))),
+      card('Contracts used', R.nSel.toLocaleString(), 'of ' + R.nAll.toLocaleString() + ' live'),
+    ].join('');
+  }
+
+  function vline(y, color, text, dash = 'dash') {
+    return { shape: { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, width: 1.5, dash } }, ann: { xref: 'paper', x: 1, y, text, showarrow: false, xanchor: 'right', yanchor: 'bottom', font: { color, size: 11 } } };
+  }
+  function hline(x, color, text, dash = 'dash') {
+    return { shape: { type: 'line', yref: 'paper', y0: 0, y1: 1, x0: x, x1: x, line: { color, width: 1.5, dash } }, ann: { yref: 'paper', y: 1, x, text, showarrow: false, xanchor: 'left', yanchor: 'top', font: { color, size: 11 } } };
+  }
+
+  function bars(R) {
+    const ks = R.strikes.map(s => s.K);
+    const lines = [vline(R.S, C.acc, 'Spot ' + R.S.toFixed(0), 'solid')];
+    const zgb = R.zeroG.vol ?? R.zeroG.oi; if (zgb != null) lines.push(vline(zgb, C.zero, 'Zero γ ' + zgb.toFixed(0)));
+    const L = baseLayout();
+    Object.assign(L, {
+      barmode: 'group', bargap: 0.15,
+      xaxis: { ...L.xaxis, title: { text: 'GEX ($M per 1%)' } }, yaxis: { ...L.yaxis, title: { text: 'Strike' }, type: 'linear' },
+      shapes: lines.map(l => l.shape), annotations: lines.map(l => l.ann), margin: { l: 65, r: 20, t: 30, b: 45 }
+    });
+    Plotly.react('barChart', [
+      { type: 'bar', orientation: 'h', name: 'OI GEX', y: ks, x: R.strikes.map(s => s.oi / 1e6), marker: { color: R.strikes.map(s => s.oi >= 0 ? C.pos : C.neg) }, hovertemplate: 'K %{y}<br>OI GEX %{x:,.1f}M<extra></extra>' },
+      { type: 'bar', orientation: 'h', name: 'Vol GEX', y: ks, x: R.strikes.map(s => s.vol / 1e6), marker: { color: R.strikes.map(s => s.vol >= 0 ? C.posSoft : C.negSoft), line: { color: C.vol, width: .6 } }, hovertemplate: 'K %{y}<br>Vol GEX %{x:,.1f}M<extra></extra>' }
+    ], L, cfg);
+  }
+
+  function profile(R) {
+    const xs = R.prof.map(p => p[0]), ys = R.prof.map(p => p[1] / 1e9);
+    const lines = [hline(R.S, C.acc, ' Spot', 'solid')];
+    if (R.zero != null && R.zero >= xs[0] && R.zero <= xs[xs.length - 1]) lines.push(hline(R.zero, C.zero, ' Flip'));
+    R.majors.posOI.slice(0, 2).forEach((k, i) => lines.push(hline(k, C.pos, ` +${i + 1}`, 'dot')));
+    R.majors.negOI.slice(0, 2).forEach((k, i) => lines.push(hline(k, C.neg, ` −${i + 1}`, 'dot')));
+    const L = baseLayout();
+    Object.assign(L, { xaxis: { ...L.xaxis, title: { text: 'Hypothetical spot' } }, yaxis: { ...L.yaxis, title: { text: 'Total OI GEX ($B per 1%)' } }, shapes: lines.map(l => l.shape), annotations: lines.map(l => l.ann), showlegend: false });
+    Plotly.react('profChart', [
+      { x: xs, y: ys.map(v => Math.max(v, 0)), type: 'scatter', mode: 'none', fill: 'tozeroy', fillcolor: C.posFill, hoverinfo: 'skip' },
+      { x: xs, y: ys.map(v => Math.min(v, 0)), type: 'scatter', mode: 'none', fill: 'tozeroy', fillcolor: C.negFill, hoverinfo: 'skip' },
+      { x: xs, y: ys, type: 'scatter', mode: 'lines', line: { color: C.txt, width: 2 }, hovertemplate: 'Spot %{x:,.0f}<br>GEX %{y:,.2f}B<extra></extra>' }
+    ], L, cfg);
+  }
+
+  function oiChart(R) {
+    const ks = R.strikes.map(s => s.K);
+    const L = baseLayout();
+    const ln = vline(R.S, C.acc, 'Spot', 'solid');
+    Object.assign(L, { barmode: 'relative', xaxis: { ...L.xaxis, title: { text: 'Open interest (contracts)' } }, yaxis: { ...L.yaxis, title: { text: 'Strike' } }, shapes: [ln.shape], annotations: [ln.ann], margin: { l: 65, r: 20, t: 30, b: 45 } });
+    Plotly.react('oiChart', [
+      { type: 'bar', orientation: 'h', name: 'Call OI', y: ks, x: R.strikes.map(s => s.callOI), marker: { color: C.pos } },
+      { type: 'bar', orientation: 'h', name: 'Put OI', y: ks, x: R.strikes.map(s => -s.putOI), marker: { color: C.neg }, customdata: R.strikes.map(s => s.putOI), hovertemplate: 'K %{y}<br>Put OI %{customdata:,}<extra></extra>' }
+    ], L, cfg);
+  }
+
+  function surf(S) {
+    if (!S.exps.length) return;
+    const scene = (zt) => ({
+      xaxis: { title: { text: 'Strike' }, gridcolor: C.grid, backgroundcolor: 'rgba(0,0,0,0)', color: C.mut },
+      yaxis: { title: { text: 'Days to expiry' }, gridcolor: C.grid, backgroundcolor: 'rgba(0,0,0,0)', color: C.mut },
+      zaxis: { title: { text: zt }, gridcolor: C.grid, backgroundcolor: 'rgba(0,0,0,0)', color: C.mut },
+      camera: { eye: { x: 1.55, y: -1.55, z: 0.9 } }, aspectmode: 'manual', aspectratio: { x: 1.4, y: 1, z: 0.7 }
+    });
+    const L1 = baseLayout(); L1.margin = { l: 0, r: 0, t: 0, b: 0 }; L1.scene = scene('GEX $M');
+    const z = S.gex.map(r => r.map(v => v / 1e6));
+    const zmax = Math.max(1, ...z.flat().map(Math.abs));
+    Plotly.react('gexSurf', [{
+      type: 'surface', x: S.strikes, y: S.dtes, z, cmin: -zmax, cmax: zmax,
+      colorscale: [[0, '#7f1d1d'], [0.35, '#ef4444'], [0.5, C.mid], [0.65, '#22c55e'], [1, '#14532d']],
+      colorbar: { title: { text: '$M' }, thickness: 12, len: 0.7 },
+      hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>GEX %{z:,.1f}M<extra></extra>',
+      contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } }
+    }], L1, cfg);
+    const L2 = baseLayout(); L2.margin = { l: 0, r: 0, t: 0, b: 0 }; L2.scene = scene('IV %');
+    Plotly.react('ivSurf', [{
+      type: 'surface', x: S.strikes, y: S.dtes, z: S.iv.map(r => r.map(v => v == null ? null : v * 100)),
+      colorscale: 'Viridis', colorbar: { title: { text: 'IV %' }, thickness: 12, len: 0.7 },
+      hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>IV %{z:.1f}%<extra></extra>'
+    }], L2, cfg);
+  }
+
+  function levelRows(R) {
+    const m = R.majors;
+    return [
+      ['Zero gamma (Vol, spline)', R.zeroG.vol], ['Zero gamma (OI, spline)', R.zeroG.oi], ['Profile flip', R.zero], ['Major +1 (OI)', m.posOI[0]], ['Major +2 (OI)', m.posOI[1]], ['Major −1 (OI)', m.negOI[0]], ['Major −2 (OI)', m.negOI[1]],
+      ['Major +1 (Vol)', m.posVol[0]], ['Major +2 (Vol)', m.posVol[1]], ['Major −1 (Vol)', m.negVol[0]], ['Major −2 (Vol)', m.negVol[1]]
+    ].filter(r => r[1] != null);
+  }
+  function levels(R) {
+    const b = basis();
+    const rows = levelRows(R).map(([n, k]) => {
+      const st = R.strikes.find(s => s.K === k);
+      return `<tr><td>${n}</td><td>${fmtK(+k.toFixed(1))}</td><td>${((k / R.S - 1) * 100).toFixed(2)}%</td><td>${b == null ? '–' : fmtK(roundF(conv(k)))}</td><td class="${st ? cls(st.oi) : ''}">${st ? fmtB(st.oi) : '–'}</td><td class="${st ? cls(st.vol) : ''}">${st ? fmtB(st.vol) : '–'}</td></tr>`;
+    }).join('');
+    $('levels').innerHTML = `<table><thead><tr><th>Level</th><th>Index</th><th>vs spot</th><th>Futures${b == null ? '' : ' (' + convLabel() + ')'}</th><th>OI GEX</th><th>Vol GEX</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="small muted" style="margin-top:8px">Enter a futures price in Settings to convert every level: SPX/NDX use an additive basis (→ES/NQ); ETFs such as GLD, SPY or QQQ use the price ratio (→GC/ES/NQ).</p>`;
+  }
+  function levelsText(R) {
+    const b = basis();
+    const head = `${R.symbol || 'Index'} GEX levels · spot ${R.S.toFixed(2)} · scope ${state.scope} · net OI GEX ${fmtB(R.sumOI)} · net Vol GEX ${fmtB(R.sumVol)}`;
+    return [head, ...levelRows(R).map(([n, k]) => `${n}: ${k.toFixed(1)}${b == null ? '' : '  (fut ' + roundF(conv(k)).toFixed(2) + ')'}`)].join('\n');
+  }
+
+
+  // ---------- Classic view ----------
+  function classicOpts() {
+    const o = { ...common(), lite: true, noVolZero: true };
+    o.scope = state.scope; o.maxDays = +$('maxDays').value || 30;
+    if (o.scope === 'full') { o.scope = 'custom'; o.maxDays = 90; }
+    return o;
+  }
+  function series() {
+    const o = classicOpts(); const key = JSON.stringify(o);
+    let arr = state.cache.get(key);
+    if (!arr) { arr = []; state.cache.set(key, arr); }
+    // compute lazily up to what playback needs
+    for (let i = 0; i <= state.idx; i++) if (!arr[i]) { try { arr[i] = GEX.compute(state.snaps[i].chain, o); } catch (e) { arr[i] = null; } }
+    return arr;
+  }
+  const disp = k => k == null ? null : (state.futMode && convInfo() ? conv(k) : k);
+  const fmtLvl = k => k == null ? '–' : (state.futMode ? roundF(disp(k)).toFixed(2) : disp(k).toFixed(2));
+  const fmtBn = v => v == null ? '–' : (v / 1e9).toFixed(4);
+
+  function runClassic() {
+    const arr = series(); const i = state.idx; const R = arr[i];
+    $('pSlider').max = state.snaps.length - 1; $('pSlider').value = i;
+    $('hCount').textContent = `${state.snaps.length} snapshot${state.snaps.length === 1 ? '' : 's'}`;
+    if (!R) { msg('Could not compute this snapshot.', 'neg'); return; }
+    state.last = R;
+    const et = toET(cur().asOf);
+    $('cDate').textContent = et.slice(0, 10); $('cTime').textContent = et.slice(11, 19); $('pTime').textContent = et.slice(11, 16) + ' ET';
+    $('cSym').textContent = (cur().chain.symbol || 'spot') + (state.futMode ? ' ⇒ fut' : '');
+    $('cPx').textContent = fmtLvl(R.S);
+    const R0 = arr[0];
+    if (R0 && i > 0) { const d = R.S - R0.S; $('cChg').textContent = `(${d >= 0 ? '+' : ''}${d.toFixed(2)} since first snapshot)`; $('cChg').className = cls(d); } else { $('cChg').textContent = ''; }
+    const setv = (id, v, c = '') => { $(id).textContent = v; $(id).className = c; };
+    setv('vZero', fmtLvl(R.zeroG.vol), 'zero'); setv('vPos', fmtLvl(R.majors.posVol[0]), 'pos'); setv('vNeg', fmtLvl(R.majors.negVol[0]), 'neg'); setv('vNet', fmtBn(R.sumVol), cls(R.sumVol));
+    setv('oZero', fmtLvl(R.zeroG.oi), 'zero'); setv('oPos', fmtLvl(R.majors.posOI[0]), 'pos'); setv('oNeg', fmtLvl(R.majors.negOI[0]), 'neg'); setv('oNet', fmtBn(R.sumOI), cls(R.sumOI));
+    maxChange(arr, i);
+    mainChart(arr, i);
+    smile();
+  }
+
+  function maxChange(arr, i) {
+    const now = state.snaps[i].asOf, R = arr[i];
+    const rows = [1, 5, 10, 15, 30].map(w => {
+      let j = -1; const tgt = now - w * 60e3, tol = Math.max(60e3, w * 30e3);
+      for (let k = i - 1; k >= 0; k--) { const a = state.snaps[k].asOf; if (a <= tgt + 30e3) { if (a >= tgt - tol) j = k; break; } }
+      if (j < 0 || !arr[j]) return `<tr><td>${w} min</td><td class="muted">–</td><td class="muted" style="text-align:right">need older snapshot</td></tr>`;
+      const prev = new Map(arr[j].strikes.map(s => [s.K, s.vol]));
+      let best = null;
+      for (const s of R.strikes) { const d = s.vol - (prev.get(s.K) || 0); if (!best || Math.abs(d) > Math.abs(best.d)) best = { K: s.K, d }; }
+      if (!best) return `<tr><td>${w} min</td><td>–</td><td></td></tr>`;
+      return `<tr><td>${w} min</td><td>${fmtLvl(best.K).replace(/\.00$/, '')}</td><td class="${cls(best.d)}" style="text-align:right">${(best.d / 1e9).toFixed(4)}Bn</td></tr>`;
+    });
+    $('mcBody').innerHTML = rows.join('');
+  }
+
+  function mainChart(arr, i) {
+    const R = arr[i];
+    const xs = [], px = [], zg = [], mp = [], mn = [];
+    for (let k = 0; k <= i; k++) { const A = arr[k]; if (!A) continue; xs.push(toET(state.snaps[k].asOf)); px.push(disp(A.S)); zg.push(disp(A.zeroG.vol ?? A.zeroG.oi)); mp.push(disp(A.majors.posVol[0])); mn.push(disp(A.majors.negVol[0])); }
+    const step0 = R.step || 5; const step = Math.abs(disp(R.S + step0) - disp(R.S)) || step0;
+    const ks = R.strikes.map(s => disp(s.K));
+    const prevR = i > 0 ? arr[i - 1] : null;
+    const absv = R.strikes.map(s => Math.max(Math.abs(s.vol), Math.abs(s.oi)) / 1e6).sort((a, b) => b - a);
+    const maxAbs = Math.max(1, absv.length > 6 ? Math.min(absv[0], absv[2] * 1.4) : (absv[0] || 1));
+    const lo = disp(R.S * (1 - common().rangePct / 100)), hi = disp(R.S * (1 + common().rangePct / 100));
+    // time axis range: the session so far (at least an hour so a single snapshot still reads)
+    const t0 = state.snaps[0].asOf, t1 = state.snaps[state.snaps.length - 1].asOf;
+    const xr = [toET(Math.min(t0, t1 - 30 * 60e3) - 5 * 60e3), toET(Math.max(t1, t0 + 30 * 60e3) + 5 * 60e3)];
+    const traces = [
+      { type: 'bar', orientation: 'h', xaxis: 'x2', y: ks, x: R.strikes.map(s => s.oi / 1e6), width: step * 0.85, name: 'GEX by OI',
+        marker: { color: R.strikes.map(s => s.oi >= 0 ? C.posSoft : C.negSoft) }, hovertemplate: '%{y}<br>GEX by OI ($MM): %{x:,.2f}<extra></extra>' },
+      { type: 'bar', orientation: 'h', xaxis: 'x2', y: ks, x: R.strikes.map(s => s.vol / 1e6), width: step * 0.42, name: 'GEX by volume',
+        marker: { color: R.strikes.map(s => s.vol >= 0 ? C.pos : C.neg) }, hovertemplate: '%{y}<br>GEX by volume ($MM): %{x:,.2f}<extra></extra>' },
+    ];
+    if (prevR) {
+      const pv = prevR.strikes.filter(s => Math.abs(s.vol) / 1e6 > maxAbs * 0.02);
+      traces.push({ type: 'scatter', mode: 'markers', xaxis: 'x2', y: pv.map(s => disp(s.K)), x: pv.map(s => s.vol / 1e6), name: 'previous snapshot (vol)',
+        marker: { color: C.prev, size: 5 }, hovertemplate: '%{y}<br>prev GEX by vol: %{x:,.2f}<extra></extra>' });
+    }
+    traces.push(
+      { type: 'scatter', mode: 'lines', x: xs, y: mp, name: 'major positive (vol)', line: { color: C.pos, width: 1.4, shape: 'hv' }, hovertemplate: '%{x|%H:%M}<br>major +: %{y:.2f}<extra></extra>' },
+      { type: 'scatter', mode: 'lines', x: xs, y: mn, name: 'major negative (vol)', line: { color: C.negLine, width: 1.4, shape: 'hv' }, hovertemplate: '%{x|%H:%M}<br>major −: %{y:.2f}<extra></extra>' },
+      { type: 'scatter', mode: 'lines', x: xs, y: zg, name: 'zero gamma (vol)', line: { color: C.zero, width: 1.4, shape: 'hv' }, connectgaps: false, hovertemplate: '%{x|%H:%M}<br>zero γ: %{y:.2f}<extra></extra>' },
+      { type: 'scatter', mode: xs.length > 1 ? 'lines' : 'markers', x: xs, y: px, name: 'price', line: { color: C.price, width: 2 }, marker: { color: C.price, size: 7 }, hovertemplate: '%{x|%H:%M}<br>price: %{y:.2f}<extra></extra>' }
+    );
+    const shapes = [], ann = [];
+    const tag = (y, color, txtColor, xpos = 0, anchor = 'left') => {
+      if (y == null) return;
+      shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, width: 1, dash: 'dash' } });
+      ann.push({ xref: 'paper', x: xpos, y, text: (+y).toFixed(2), showarrow: false, xanchor: anchor, bgcolor: color, font: { color: txtColor, size: 11 }, borderpad: 2 });
+    };
+    tag(disp(R.majors.posVol[0]), C.posTag, C.posTagTxt);
+    tag(disp(R.majors.negVol[0]), C.negTag, C.negTagTxt);
+    tag(disp(R.zeroG.vol ?? R.zeroG.oi), C.zero, C.zeroTagTxt, 1, 'right');
+    // open-interest walls (the levels Fredy trades) as dotted lines with right-side tags
+    const oiTag = (k, color, txt) => { if (k == null) return; const y = disp(k); shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, width: 1.2, dash: 'dot' } }); ann.push({ xref: 'paper', x: 1, y, text: `${txt} ${(+y).toFixed(1)}`, showarrow: false, xanchor: 'right', yanchor: 'bottom', font: { color, size: 11 } }); };
+    oiTag(R.majors.posOI[0], C.oiPos, 'OI wall +'); oiTag(R.majors.negOI[0], C.oiNeg, 'OI wall −'); oiTag(R.majors.negOI[1], C.oiNeg, 'OI wall −2');
+    ann.push({ xref: 'paper', x: 0, y: disp(R.S), text: (+disp(R.S)).toFixed(2), showarrow: false, xanchor: 'left', bgcolor: C.price, font: { color: C.priceTagTxt, size: 11 }, borderpad: 2 });
+    shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: disp(R.S), y1: disp(R.S), line: { color: C.price, width: 1 } });
+    const L = baseLayout();
+    Object.assign(L, {
+      barmode: 'overlay', showlegend: true, legend: { orientation: 'h', y: -0.06, x: 0, font: { size: 11 } },
+      margin: { l: 60, r: 10, t: 40, b: 60 },
+      xaxis: { type: 'date', range: xr, gridcolor: C.grid, tickformat: '%H:%M' },
+      xaxis2: { overlaying: 'x', side: 'top', range: [-maxAbs * 1.15, maxAbs * 1.15], showgrid: false, zeroline: true, zerolinecolor: C.zl, tickformat: ',.0f', title: { text: 'GEX ($MM per 1%)', font: { size: 11 } } },
+      yaxis: { range: [lo, hi], gridcolor: C.grid, side: 'left', tickformat: '.0f' },
+      shapes, annotations: ann, hovermode: 'closest'
+    });
+    Plotly.react('mainChart', traces, L, cfg);
+  }
+
+  // volatility smile + volume curve for one expiry of the current snapshot
+  function smile() {
+    const ch = cur().chain, S = ch.spot, a = cur().asOf;
+    const exps = [...new Set(ch.rows.map(r => r.exp))].filter(e => GEX.expiryMs(e) > a).sort().slice(0, 40);
+    const sel = $('smExp'); const prev = sel.value;
+    const R = state.last;
+    const want = exps.includes(prev) ? prev : ((R && R.scopeExps[0]) || exps[0]);
+    sel.innerHTML = exps.map(e => `<option value="${e}"${e === want ? ' selected' : ''}>${e} (${((GEX.expiryMs(e) - a) / 864e5).toFixed(1)}d)</option>`).join('');
+    const exp = sel.value; if (!exp) return;
+    const build = chain => {
+      const m = new Map();
+      for (const r of chain.rows) {
+        if (r.exp !== exp) continue;
+        const e = m.get(r.K) || { K: r.K, civ: null, piv: null, cv: 0, pv: 0 };
+        const iv = r.iv > 3 ? r.iv / 100 : r.iv;
+        if (r.type === 'C') { e.cv += r.vol; if (iv > 0.005 && iv < 3) e.civ = iv; } else { e.pv += r.vol; if (iv > 0.005 && iv < 3) e.piv = iv; }
+        m.set(r.K, e);
+      }
+      const span = Math.max(common().rangePct * 1.6, 4) / 100;
+      return [...m.values()].filter(e => e.K >= chain.spot * (1 - span) && e.K <= chain.spot * (1 + span)).sort((x, y) => x.K - y.K);
+    };
+    const pts = build(ch);
+    const otm = pts.map(e => e.K < S ? (e.piv ?? e.civ) : (e.civ ?? e.piv));
+    const x = pts.map(e => disp(e.K));
+    const traces = [
+      { type: 'bar', x, y: pts.map(e => e.cv), name: 'call volume', yaxis: 'y2', marker: { color: C.posFill.replace('.12', '.35').replace('.16', '.35') }, hovertemplate: '%{x}<br>call vol %{y:,}<extra></extra>' },
+      { type: 'bar', x, y: pts.map(e => e.pv), name: 'put volume', yaxis: 'y2', marker: { color: C.negFill.replace('.12', '.35').replace('.16', '.35') }, hovertemplate: '%{x}<br>put vol %{y:,}<extra></extra>' },
+      { type: 'scatter', mode: 'lines', x, y: pts.map(e => e.civ == null ? null : e.civ * 100), name: 'call IV', line: { color: C.pos, width: 1, dash: 'dot' }, connectgaps: true },
+      { type: 'scatter', mode: 'lines', x, y: pts.map(e => e.piv == null ? null : e.piv * 100), name: 'put IV', line: { color: C.neg, width: 1, dash: 'dot' }, connectgaps: true },
+      { type: 'scatter', mode: 'lines+markers', x, y: otm.map(v => v == null ? null : v * 100), name: 'smile (OTM IV)', line: { color: C.txt, width: 2.2 }, marker: { size: 3 }, connectgaps: true, hovertemplate: '%{x}<br>IV %{y:.2f}%<extra></extra>' },
+    ];
+    let note = '';
+    if (state.idx > 0) {
+      const first = state.snaps[0].chain; const p0 = build(first);
+      if (p0.length) {
+        traces.push({ type: 'scatter', mode: 'lines', x: p0.map(e => disp(e.K)), y: p0.map(e => { const v = e.K < first.spot ? (e.piv ?? e.civ) : (e.civ ?? e.piv); return v == null ? null : v * 100; }), name: 'smile at first snapshot', line: { color: C.smile0, width: 1.2, dash: 'dash' }, connectgaps: true });
+        note = `dashed = ${toET(state.snaps[0].asOf).slice(11, 16)} ET`;
+      }
+    }
+    $('smNote').textContent = note;
+    const L = baseLayout();
+    const ln = { type: 'line', yref: 'paper', y0: 0, y1: 1, x0: disp(S), x1: disp(S), line: { color: C.price, width: 1 } };
+    Object.assign(L, { barmode: 'group', bargap: 0.1, xaxis: { ...L.xaxis, title: { text: 'Strike' } }, yaxis: { ...L.yaxis, title: { text: 'Implied vol (%)' } },
+      yaxis2: { overlaying: 'y', side: 'right', showgrid: false, title: { text: 'Volume (contracts)' }, rangemode: 'tozero' }, shapes: [ln], margin: { l: 60, r: 60, t: 30, b: 45 } });
+    Plotly.react('smileChart', traces, L, cfg);
+  }
+
+  // ---------- synthetic demo session (clearly labelled, not market data) ----------
+  function demoSession() {
+    let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const gauss = () => { const u = rnd() || 1e-9, v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+    // session date: today in ET if a weekday, else the previous Friday
+    let d = new Date(); const etDay = () => toET(d.getTime()).slice(0, 10);
+    while ([0, 6].includes(new Date(etDay() + 'T12:00:00Z').getUTCDay())) d = new Date(d.getTime() - 864e5);
+    const day = etDay(); const [Y, M, D] = day.split('-').map(Number);
+    const exps = []; for (let k = 0, n = 0; n < 60 && k < 120; k++) { const t = new Date(Date.UTC(Y, M - 1, D + k)); if ([0, 6].includes(t.getUTCDay())) continue; n++; if (n <= 8 || n % 5 === 0) exps.push(t.toISOString().slice(0, 10)); }
+    const S0 = 6000; const tmpl = [];
+    exps.forEach((e, ei) => {
+      const sz = (ei === 0 ? 1 : 0.55 / Math.sqrt(1 + ei)) * 0.12;
+      for (let K = 5550; K <= 6450; K += 5) {
+        const bump = (c, w) => Math.exp(-(((K - c) / w) ** 2));
+        const mny = Math.log(K / S0); const ivb = Math.max(0.07, 0.14 - 0.6 * mny + 3 * mny * mny + 0.01 * Math.sqrt(ei));
+        const r50 = K % 50 === 0 ? 1 : 0, r25 = K % 25 === 0 ? 1 : 0;
+        const cOI = Math.round(sz * (2500 * bump(S0, 150) + 7000 * bump(6075, 15) + 5000 * bump(6150, 20) + 1500 * r50 + 600 * r25) * (0.7 + 0.6 * rnd()));
+        const pOI = Math.round(sz * (3000 * bump(S0, 200) + 8000 * bump(5925, 15) + 6000 * bump(5850, 20) + 1800 * r50 + 700 * r25) * (0.7 + 0.6 * rnd()));
+        const vc = ei === 0 ? 2.2 : 0.3;
+        tmpl.push({ exp: e, K, type: 'C', oi: cOI, fv: cOI * vc * (0.4 + rnd()) * (0.3 + bump(S0 + 35, 90)), ivb });
+        tmpl.push({ exp: e, K, type: 'P', oi: pOI, fv: pOI * vc * (0.4 + rnd()) * (0.3 + bump(S0 - 25, 90)), ivb });
+      }
+    });
+    const snaps = []; let S = S0;
+    for (let mins = 10; mins <= 380; mins += 10) { // 09:40 .. 15:50 ET
+      const asOf = GEX.etToMs(Y, M - 1, D, 9, 30) + mins * 60e3;
+      S = S + gauss() * 6 + (mins > 200 && mins < 280 ? -4 : 0.6);
+      const frac = Math.pow(mins / 390, 0.8);
+      const ivShift = 0.35 * (S0 - S) / S0;
+      const rows = tmpl.map(r => ({ root: 'DEMO', exp: r.exp, type: r.type, K: r.K, oi: r.oi, vol: Math.round(r.fv * frac * (r.type === 'P' && S < S0 ? 1 + 6 * (S0 - S) / S0 : 1)), iv: Math.max(0.05, r.ivb + ivShift), gamma: 0, delta: 0 }));
+      snaps.push({ symbol: 'DEMO', spot: +S.toFixed(2), asOf, rows });
+    }
+    return snaps;
+  }
+})();
+
+</script>
+</body>
+</html>
