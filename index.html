@@ -124,6 +124,7 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
 .sbox{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px}
 .stl{font-size:12px;font-weight:600;margin:2px 4px 0}
 .splot{height:calc(50vh - 95px);min-height:300px}
+.scap{font-size:11.5px;line-height:1.5;color:var(--text);padding:8px 6px 4px;border-top:1px solid var(--line);margin-top:4px}
 @media (max-width:1100px){.zgrid,.zcards,.sgrid{grid-template-columns:1fr}.zgrid{height:auto}.zgrid canvas{height:380px}}
 .lvsyms{display:flex;gap:6px;margin:0 0 12px}
 .lvsyms button{background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:12px;color:var(--muted)}
@@ -1564,23 +1565,49 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     const el = $('levels'), c = cur();
     if (!c) { el.innerHTML = '<h2>3D surfaces</h2><div class="sub">Load a file first.</div>'; return; }
     el.innerHTML = `<h2>3D surfaces · ${tickerLabel(st.sym)}</h2><div class="sub">Strike × days to expiry. GEX is the naive dealer convention (calls +, puts −), in $M per 1% move. Volume is contracts traded today. IV comes from out-of-the-money options.</div>
-      <div class="sgrid"><div class="sbox"><div class="stl">GEX by open interest</div><div id="sfOI" class="splot"></div></div><div class="sbox"><div class="stl">GEX by volume (today's flow)</div><div id="sfVG" class="splot"></div></div><div class="sbox"><div class="stl">Volume (contracts)</div><div id="sfV" class="splot"></div></div><div class="sbox"><div class="stl">Implied volatility</div><div id="sfIV" class="splot"></div></div></div>`;
+      <div class="sgrid">
+        <div class="sbox"><div class="stl">GEX by open interest</div><div id="sfOI" class="splot"></div><div class="scap"><b>How to read:</b> the <b>flat plateau</b> at zero is strikes and expiries where little positioning sits, so dealers have nothing to hedge and price moves freely there. <span class="c-gr">Green peaks</span> are call-heavy positive gamma: dealers are long gamma and sell rallies and buy dips, so those strikes act as walls or magnets. <span class="c-rd">Red valleys</span> are put-heavy negative gamma: dealers are short gamma and chase price, so moves through them accelerate. Peaks close to the front (few days to expiry) matter most today. Far-dated peaks are structural.</div></div>
+        <div class="sbox"><div class="stl">GEX by volume (today's flow)</div><div id="sfVG" class="splot"></div><div class="scap"><b>How to read:</b> the same as the left surface, but built from <b>today's traded volume</b>: where the money is going now. The <b>plateau</b> is strikes nobody is trading today. A tall spike on the 0DTE edge is today's battleground. Usually it is the volume major (ceiling if green, floor if red) that Classic draws. Spikes far out in time are hedges or longer-dated bets, not intraday levels.</div></div>
+        <div class="sbox"><div class="stl">Volume (contracts)</div><div id="sfV" class="splot"></div><div class="scap"><b>How to read:</b> raw contracts traded today, regardless of call or put. The <b>low plateau</b> is quiet strikes. <b>Mountains</b> show where traders are concentrated, usually at the money and in today's expiry. A mountain away from spot is a target someone is paying for. Volume alone has no direction; check the GEX surfaces for which side dominates.</div></div>
+        <div class="sbox"><div class="stl">Implied volatility</div><div id="sfIV" class="splot"></div><div class="scap"><b>How to read:</b> the price of options as annual volatility. The <b>flat plateau</b> near spot is normal, fairly priced volatility. The surface <b>rising toward low strikes</b> is put skew: traders pay up for crash protection, a sign of fear. A <b>rising call side</b> means upside is in demand. A tall wall on the very front (0DTE) edge is normal: options with hours left show extreme IV on their far strikes. Higher IV means bigger expected moves and weaker GEX walls.</div></div></div>`;
     loadPlotly().then(() => {
       const S = GEX.surfaces(c, { maxDays: st.surfDays || 30, rangePct: st.surfRange || 5, q: GM.QDIV[st.sym] ?? 0.012 });
       if (!S.exps.length) return;
       const dark = !document.documentElement.classList.contains('light'), mut = css('--muted'), grid = css('--line');
       const ks = S.strikes.map(k => +conv(k).toFixed(2));
       const scene = zt => ({ xaxis: { title: { text: st.useFut && futInfo(st.sym) ? futInfo(st.sym).fut : st.sym }, gridcolor: grid, color: mut, backgroundcolor: 'rgba(0,0,0,0)' }, yaxis: { title: { text: 'Days to expiry' }, gridcolor: grid, color: mut, backgroundcolor: 'rgba(0,0,0,0)' }, zaxis: { title: { text: zt }, gridcolor: grid, color: mut, backgroundcolor: 'rgba(0,0,0,0)' }, camera: { eye: { x: 1.5, y: -1.6, z: 0.85 } }, aspectmode: 'manual', aspectratio: { x: 1.4, y: 1, z: 0.7 } });
-      const lay = zt => ({ paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { color: mut, family: 'Inter, sans-serif', size: 11 }, margin: { l: 0, r: 0, t: 0, b: 0 }, scene: scene(zt) });
+      const lay = zt => ({ paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { color: mut, family: 'Inter, sans-serif', size: 11 }, margin: { l: 0, r: 0, t: 0, b: 0 }, scene: scene(zt), hoverlabel: { bgcolor: dark ? '#141418' : '#ffffff', bordercolor: grid, font: { color: dark ? '#e8e8ec' : '#15161a', size: 12, family: 'Inter, sans-serif' }, align: 'left' } });
       const cfg = { displaylogo: false, responsive: true };
       const div = (m, f = 1e6) => m.map(r => r.map(v => v == null ? null : v / f));
       const sym = (z) => { const m = Math.max(1, ...z.flat().filter(v => v != null).map(Math.abs)); return [-m, m]; };
       const gexScale = [[0, '#7f1d1d'], [0.35, '#e5383b'], [0.5, dark ? '#1d1d24' : '#eceef1'], [0.65, '#5fd35f'], [1, '#14532d']];
       const zOI = div(S.gex), zVG = div(S.gexV), [a1, b1] = sym(zOI), [a2, b2] = sym(zVG);
-      Plotly.react('sfOI', [{ type: 'surface', x: ks, y: S.dtes, z: zOI, cmin: a1, cmax: b1, colorscale: gexScale, colorbar: { title: { text: '$M' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>GEX %{z:,.1f}M<extra></extra>', contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } } }], lay('GEX $M'), cfg);
-      Plotly.react('sfVG', [{ type: 'surface', x: ks, y: S.dtes, z: zVG, cmin: a2, cmax: b2, colorscale: gexScale, colorbar: { title: { text: '$M' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>Vol GEX %{z:,.1f}M<extra></extra>', contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } } }], lay('Vol GEX $M'), cfg);
-      Plotly.react('sfV', [{ type: 'surface', x: ks, y: S.dtes, z: S.volm, colorscale: [[0, '#0d0887'], [0.25, '#6a00a8'], [0.5, '#b12a90'], [0.75, '#e16462'], [1, '#fca636']], colorbar: { title: { text: 'contracts' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>%{z:,.0f} contracts<extra></extra>' }], lay('Volume'), cfg);
-      Plotly.react('sfIV', [{ type: 'surface', x: ks, y: S.dtes, z: S.iv.map(r => r.map(v => v == null ? null : v * 100)), colorscale: 'Viridis', colorbar: { title: { text: 'IV %' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>IV %{z:.1f}%<extra></extra>' }], lay('IV %'), cfg);
+      const wrap = s => s.split('<br>').map(part => { const out = []; let line = '', vis = 0; for (const w of part.split(' ')) { const wl = w.replace(/<[^>]+>/g, '').length; if (vis + wl > 58 && line) { out.push(line); line = w; vis = wl; } else { line = line ? line + ' ' + w : w; vis += wl + 1; } } if (line) out.push(line); return out.join('<br>'); }).join('<br>');
+      const W2 = m => m.map(r => r.map(wrap));
+      const Sp = c.spot, when = d => d < 1 ? 'today\'s expiry (0DTE): matters most intraday' : d < 2.5 ? 'next expiry (1DTE)' : d < 8 ? 'this week' : 'further out: structural, slower';
+      const side = K => Math.abs(K / Sp - 1) < 0.0025 ? 'at spot' : K > Sp ? `${pts(K - Sp)} pts above spot` : `${pts(Sp - K)} pts below spot`;
+      const gexTxt = (z, mx, live) => z.map((row, i) => row.map((v, j) => {
+        const K = S.strikes[j], d = S.dtes[i], r = mx ? Math.abs(v) / mx : 0, w = `<br><i>${side(K)} · ${when(d)}</i>`;
+        if (v == null || r < 0.04) return `<b>Plateau</b>: almost no ${live ? 'flow today' : 'positioning'} here. Dealers have little to hedge, so price passes through freely.` + w;
+        const big = r > 0.35 ? 'Major' : r > 0.12 ? 'Notable' : 'Minor';
+        return v > 0 ? `<b>${big} positive gamma peak</b> (call-heavy). Dealers are long gamma: they sell rallies and buy dips, so this strike acts as a ${K >= Sp ? 'ceiling / magnet above' : 'support / magnet below'}.${live ? ' Built from today\'s volume, so it is live.' : ''}` + w
+          : `<b>${big} negative gamma valley</b> (put-heavy). Dealers are short gamma: they chase price, so moves through this strike tend to accelerate.${K < Sp ? ' Below spot it is also where put buyers book profit (a possible bounce).' : ''}` + w;
+      }));
+      const mOI = b1, mVG = b2, vmax = Math.max(1, ...S.volm.flat());
+      const volTxt = S.volm.map((row, i) => row.map((v, j) => { const K = S.strikes[j], d = S.dtes[i], r = v / vmax, w = `<br><i>${side(K)} · ${when(d)}</i>`; return (r < 0.03 ? '<b>Plateau</b>: barely traded today. A quiet strike.' : r > 0.35 ? '<b>Volume mountain</b>: one of today\'s busiest strikes, where the fight is.' : r > 0.1 ? '<b>Active strike</b>: meaningful trading today.' : '<b>Light trading</b>.') + w; }));
+      const ivTxt = S.iv.map((row, i) => { const atmJ = S.strikes.reduce((b, k, j) => Math.abs(k - Sp) < Math.abs(S.strikes[b] - Sp) ? j : b, 0), atm = row[atmJ]; return row.map((v, j) => {
+        const K = S.strikes[j], d = S.dtes[i], w = `<br><i>${side(K)} · ${when(d)} · ATM IV ${atm ? fmt(atm * 100, 1) + '%' : '–'}</i>`;
+        if (v == null || !atm) return 'No priced options here.' + w;
+        const rel = v / atm;
+        if (d < 1 && rel > 1.6) return `<b>0DTE wing</b>: options with hours left show extreme IV on far strikes. Normal, not a signal.` + w;
+        if (rel > 1.25 && K < Sp) return `<b>Put skew (rising surface)</b>: downside protection is priced ${fmt((rel - 1) * 100, 0)}% above ATM. Traders are paying for crash insurance: fear.` + w;
+        if (rel > 1.25 && K > Sp) return `<b>Call wing bid</b>: upside options priced ${fmt((rel - 1) * 100, 0)}% above ATM. Demand for upside exposure.` + w;
+        if (rel < 0.85) return `<b>Cheap volatility</b>: priced below ATM. Little demand at this strike.` + w;
+        return `<b>Plateau</b>: volatility close to ATM, normal and fairly priced.` + w; }); });
+      Plotly.react('sfOI', [{ type: 'surface', x: ks, y: S.dtes, z: zOI, cmin: a1, cmax: b1, colorscale: gexScale, colorbar: { title: { text: '$M' }, thickness: 10, len: 0.7 }, customdata: W2(gexTxt(zOI, mOI, false)), hovertemplate: '<b>%{x}</b> · %{y:.1f} days · GEX %{z:,.1f}M<br>%{customdata}<extra></extra>', contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } } }], lay('GEX $M'), cfg);
+      Plotly.react('sfVG', [{ type: 'surface', x: ks, y: S.dtes, z: zVG, cmin: a2, cmax: b2, colorscale: gexScale, colorbar: { title: { text: '$M' }, thickness: 10, len: 0.7 }, customdata: W2(gexTxt(zVG, mVG, true)), hovertemplate: '<b>%{x}</b> · %{y:.1f} days · Vol GEX %{z:,.1f}M<br>%{customdata}<extra></extra>', contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } } }], lay('Vol GEX $M'), cfg);
+      Plotly.react('sfV', [{ type: 'surface', x: ks, y: S.dtes, z: S.volm, colorscale: [[0, '#0d0887'], [0.25, '#6a00a8'], [0.5, '#b12a90'], [0.75, '#e16462'], [1, '#fca636']], colorbar: { title: { text: 'contracts' }, thickness: 10, len: 0.7 }, customdata: W2(volTxt), hovertemplate: '<b>%{x}</b> · %{y:.1f} days · %{z:,.0f} contracts<br>%{customdata}<extra></extra>' }], lay('Volume'), cfg);
+      Plotly.react('sfIV', [{ type: 'surface', x: ks, y: S.dtes, z: S.iv.map(r => r.map(v => v == null ? null : v * 100)), colorscale: 'Viridis', colorbar: { title: { text: 'IV %' }, thickness: 10, len: 0.7 }, customdata: W2(ivTxt), hovertemplate: '<b>%{x}</b> · %{y:.1f} days · IV %{z:.1f}%<br>%{customdata}<extra></extra>' }], lay('IV %'), cfg);
     }).catch(e => { el.insertAdjacentHTML('beforeend', `<div class="sub c-rd">${e.message}. The 3D view needs internet access to cdn.plot.ly.</div>`); });
   }
 
