@@ -114,6 +114,16 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
 .note{font-size:10.5px;color:var(--muted);line-height:1.45;margin-top:12px}
 /* levels view */
 #levels{position:absolute;inset:0;overflow:auto;padding:16px 18px;display:none}
+.zgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;height:calc(100vh - 330px);min-height:360px}
+.zgrid canvas{width:100%;height:100%;border:1px solid var(--line);border-radius:8px;display:block}
+.zcards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.zc{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;background:var(--panel)}
+.zc .zt{font-weight:600;font-size:13.5px;margin-bottom:4px;font-family:var(--mono)}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sbox{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px}
+.stl{font-size:12px;font-weight:600;margin:2px 4px 0}
+.splot{height:calc(50vh - 95px);min-height:300px}
+@media (max-width:1100px){.zgrid,.zcards,.sgrid{grid-template-columns:1fr}.zgrid{height:auto}.zgrid canvas{height:380px}}
 .lvsyms{display:flex;gap:6px;margin:0 0 12px}
 .lvsyms button{background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:12px;color:var(--muted)}
 .lvsyms button.on{color:var(--text);background:var(--btnOn)}
@@ -181,6 +191,8 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
     <a data-v="state">state</a>
     <span class="sep">|</span>
     <a data-v="levels">levels</a>
+    <a data-v="zones">profit zones</a>
+    <a data-v="surf">3d</a>
   </div>
   <div id="topr">
     <a id="liveBtn"><span id="liveDot"></span>live link</a>
@@ -519,12 +531,12 @@ const GEX = (() => {
     let w = opts.binWidth;
     if (!w) { const raw = (hi - lo) / 40; const p = Math.pow(10, Math.floor(Math.log10(raw))); w = [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= raw) || 10 * p; }
     const k0 = Math.ceil(lo / w) * w; const ks = []; for (let k = k0; k <= hi + 1e-9; k += w) ks.push(+k.toFixed(6));
-    const gex = exps.map(() => ks.map(() => 0));
+    const gex = exps.map(() => ks.map(() => 0)), gexV = exps.map(() => ks.map(() => 0)), volm = exps.map(() => ks.map(() => 0));
     const ivS = exps.map(() => ks.map(() => [0, 0]));
     const unit = S * S * 0.01 * 100;
     for (const c of cs) {
       const i = exps.indexOf(c.exp); const j = Math.min(ks.length - 1, Math.max(0, Math.round((c.K - k0) / w)));
-      gex[i][j] += (c.type === 'C' ? 1 : -1) * gammaAt(c, S, r, q) * c.oi * unit;
+      const gg = (c.type === 'C' ? 1 : -1) * gammaAt(c, S, r, q) * unit; gex[i][j] += gg * c.oi; gexV[i][j] += gg * c.vol; volm[i][j] += c.vol;
       const otm = (c.type === 'P' && c.K <= S) || (c.type === 'C' && c.K >= S);
       if (otm && c.iv > 0.005 && c.iv < 3) { const wt = 1 + c.oi + c.vol; ivS[i][j][0] += c.iv * wt; ivS[i][j][1] += wt; }
     }
@@ -541,7 +553,7 @@ const GEX = (() => {
       });
     });
     const dtes = exps.map(e => +(((expiryMs(e) - m.asOf) / 864e5)).toFixed(2));
-    return { exps, dtes, strikes: ks, gex, iv, width: w, S };
+    return { exps, dtes, strikes: ks, gex, gexV, volm, iv, width: w, S };
   }
 
   return { parseAny, parseGexSnap, parseCboeCSV, parseCboeJSON, compute, surfaces, bsGamma, bsDelta, expiryMs, etToMs };
@@ -779,6 +791,33 @@ GM.analysis = function (snaps, i, scope) {
   const regime = L.zero == null ? 'unknown' : S >= L.zero ? 'above' : 'below';
   return { S, key, L, oi: r.oi, vol: r.vol, step, near, net, mc, mcBias, turning, battle, crosses, zRange, shift, minsLeft, regime, hasVol: r.hasVol, scope };
 };
+
+// ===== Profit-taking zones: the 25-delta strikes of an expiry (where option buyers' gamma peaks) =====
+GM.zones = function (snap, ei) {
+  const P = GM.prep(snap), S = P.S, q = P.q, R = 0.04;
+  const cs = P.cs.filter(c => c.ei === ei && c.iv > 0.005 && c.iv < 4 && Math.abs(c.K / S - 1) < 0.2);
+  if (cs.length < 6) return null;
+  const T = cs[0].T, exp = P.exps[ei];
+  const calls = cs.filter(c => c.type === 'C').sort((a, b) => a.K - b.K), puts = cs.filter(c => c.type === 'P').sort((a, b) => a.K - b.K);
+  const cross = (arr, target) => { // arr sorted by K, delta monotone; linear interpolation of K and IV where delta crosses target
+    for (let i = 1; i < arr.length; i++) { const a = arr[i - 1], b = arr[i]; if ((a.d - target) * (b.d - target) <= 0 && a.d !== b.d) { const w = (target - a.d) / (b.d - a.d); return { K: a.K + w * (b.K - a.K), iv: a.iv + w * (b.iv - a.iv), lo: a, hi: b }; } }
+    return null;
+  };
+  const c25 = cross(calls.filter(c => c.K >= S * 0.98), 0.25), p25 = cross(puts.filter(c => c.K <= S * 1.02), -0.25);
+  let atm = cs[0]; for (const c of cs) if (Math.abs(c.K - S) < Math.abs(atm.K - S)) atm = c;
+  const atmIv = (() => { const v = cs.filter(c => c.K === atm.K).map(c => c.iv); return v.reduce((a, b) => a + b, 0) / v.length; })();
+  // volume / OI traded around each 25-delta strike (where the buyers actually are)
+  const near = (z, type) => z ? cs.filter(c => c.type === type && Math.abs(c.K - z.K) <= Math.abs(z.hi.K - z.lo.K) * 1.5).reduce((a, c) => ({ vol: a.vol + c.vol, oi: a.oi + c.oi }), { vol: 0, oi: 0 }) : null;
+  const span = Math.max(c25 ? c25.K - S : 0, p25 ? S - p25.K : 0, S * 0.003) * 2.6;
+  const curve = [];
+  for (let k = 0; k <= 160; k++) {
+    const x = S - span + 2 * span * k / 160, o = { P: x };
+    if (c25) { const g = GM.greeks(x, c25.K, T, c25.iv, R, q, 'C'); o.dc = g.d * 100; o.gc = g.g; }
+    if (p25) { const g = GM.greeks(x, p25.K, T, p25.iv, R, q, 'P'); o.dp = -g.d * 100; o.gp = g.g; }
+    curve.push(o);
+  }
+  return { S, T, exp, ei, c25, p25, atm: atm.K, atmIv, curve, flowC: near(c25, 'C'), flowP: near(p25, 'P') };
+};
 </script>
 <script>// ===== GEX terminal UI (GexBot-style classic + state + levels) =====
 (() => {
@@ -854,10 +893,10 @@ GM.analysis = function (snaps, i, scope) {
   function setSym(sym, keepIdx) {
     st.sym = sym; const a = snaps(); if (!keepIdx) st.idx = a.length - 1;
     st.idx = Math.max(0, Math.min(st.idx, a.length - 1));
-    $('empty').style.display = a.length || st.view === 'levels' ? 'none' : 'flex';
-    renderSide(); draw(); if (st.view === 'levels') renderLevels();
+    $('empty').style.display = a.length || PANEL_VIEWS.includes(st.view) ? 'none' : 'flex';
+    renderSide(); draw(); if (PANEL_VIEWS.includes(st.view)) renderPanel();
   }
-  function clearAll() { stopPlay(); st.store = {}; st.sym = null; st.idx = 0; idbClear(); renderSide(); draw(); $('empty').style.display = st.view === 'levels' ? 'none' : 'flex'; if (st.view === 'levels') renderLevels(); }
+  function clearAll() { stopPlay(); st.store = {}; st.sym = null; st.idx = 0; idbClear(); renderSide(); draw(); $('empty').style.display = PANEL_VIEWS.includes(st.view) ? 'none' : 'flex'; if (PANEL_VIEWS.includes(st.view)) renderPanel(); }
 
   // ---------- live link (bookmarklet on cboe.com posts snapshots here) ----------
   const BOOKMARKLET = `javascript:(()=>{const U='${TERMINAL_URL}#live';let w=window.open(U,'gexterm');const L=[['_SPX','SPX'],['_NDX','NDX'],['GLD','GLD']];let last={};async function tick(){for(const[p,s]of L){try{const j=await(await fetch('https://cdn-api.cboe.com/api/global/delayed_quotes/options/'+p+'.json',{cache:'no-store'})).json();if(last[s]===j.timestamp)continue;last[s]=j.timestamp;const D=j.data,X=+D.current_price||+D.close,n=Date.now(),rows=[];for(const o of D.options){const m=o.option.match(/(\\d{2})(\\d{2})(\\d{2})[CP](\\d{8})$/);if(!m)continue;const e=Date.UTC(2000+ +m[1],m[2]-1,+m[3],21),K=m[4]/1000;if(e<n-864e5||(e-n)/864e5>95||K<X*.85||K>X*1.15||!(+o.open_interest||+o.volume))continue;rows.push([o.option,+o.open_interest||0,+o.volume||0,+o.iv||0,+o.gamma||0,+o.delta||0,+o.bid||0,+o.ask||0,+o.last_trade_price||0])}let C='';try{const ij=await(await fetch('https://cdn-api.cboe.com/api/global/delayed_quotes/charts/intraday/'+p+'.json',{cache:'no-store'})).json();const B=ij.data||[];if(B.length)C=B[0].datetime.slice(0,10)+' '+B.map(b=>b.datetime.slice(11,16).replace(':','')+','+b.price.open+','+b.price.high+','+b.price.low+','+b.price.close).join(';')}catch(e){}if(!w||w.closed){document.title='GEX link: terminal closed';return}w.postMessage({gexlive:1,symbol:s,spot:X,prev_close:+D.prev_day_close||X,open:+D.open||0,high:+D.high||0,low:+D.low||0,ts:j.timestamp,candles:C,rows},'*')}catch(e){console.log('gex link',e)}}document.title='● GEX link '+new Date().toLocaleTimeString()}setTimeout(tick,5000);setInterval(tick,60000)})()`;
@@ -871,7 +910,7 @@ GM.analysis = function (snaps, i, scope) {
       const s = addSnap(ch); idbPut(ch, d);
       st.live.on = true; st.live.last = Date.now(); $('liveDot').classList.add('on');
       if (!prevSym) setSym(s); else if (s === st.sym) { if (wasLast && !st.play) st.idx = snaps().length - 1; renderSide(); draw(); } else renderSide();
-      if (st.view === 'levels') renderLevels();
+      if (PANEL_VIEWS.includes(st.view)) renderPanel();
     } catch (e) { console.warn('live message', e); }
   });
   setInterval(() => { if (st.live.on && Date.now() - st.live.last > 150000) { st.live.on = false; $('liveDot').classList.remove('on'); } }, 15000);
@@ -893,12 +932,15 @@ GM.analysis = function (snaps, i, scope) {
   }
 
   // ---------- views ----------
+  const PANEL_VIEWS = ['levels', 'zones', 'surf'];
+  function renderPanel() { if (st.view === 'levels') renderLevels(); else if (st.view === 'zones') renderZones(); else if (st.view === 'surf') renderSurf(); }
   function selectView(v) {
     st.view = v; document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
-    $('levels').style.display = v === 'levels' ? 'block' : 'none';
-    $('cv').style.display = $('tools').style.display = $('wm').style.display = v === 'levels' ? 'none' : '';
-    $('empty').style.display = v !== 'levels' && !snaps().length ? 'flex' : 'none';
-    renderSide(); if (v === 'levels') renderLevels(); else { resize(); draw(); }
+    const panel = PANEL_VIEWS.includes(v);
+    $('levels').style.display = panel ? 'block' : 'none';
+    $('cv').style.display = $('tools').style.display = $('wm').style.display = panel ? 'none' : '';
+    $('empty').style.display = !panel && !snaps().length ? 'flex' : 'none';
+    renderSide(); if (panel) renderPanel(); else { resize(); draw(); }
   }
 
   // ---------- sidebar ----------
@@ -958,6 +1000,23 @@ GM.analysis = function (snaps, i, scope) {
       h += playBlock();
       if (r && r.source === 'oi') h += `<div class="note"><span class="c-or">Source: open interest.</span> This snapshot has no classified trades yet (pre-market, or a file without bid/ask/last), so the ladders use open interest with the usual customer assumption: takers short calls, long puts. Once volume trades, state switches to classified flow automatically.</div>`;
       else if (r) h += `<div class="note">Source: classified flow (proxy). Each interval's new volume is split taker-long / taker-short by where the contract's last trade sits inside its bid/ask.</div>`;
+    } else if (st.view === 'zones') {
+      const z = c && GM.zones(c, st.zExp || 0);
+      h += `<div class="shead"><h3>profit zones</h3></div>` + tickerBlock();
+      const exps = c ? GM.prep(c).exps : [];
+      h += `<div class="seg"><button data-ze="0" class="${!st.zExp ? 'on' : ''}">latest (${mmdd(exps[0])})</button><button data-ze="1" class="${st.zExp === 1 ? 'on' : ''}">next (${mmdd(exps[1])})</button></div>`;
+      h += updateBlock(c);
+      if (z) {
+        h += `<div class="sec">profit-taking levels</div>` + kv('upside · 25Δ call', z.c25 ? F(z.c25.K) : '–', 'c-cy') + kv('downside · 25Δ put', z.p25 ? F(z.p25.K) : '–', 'c-pu') + kv('ATM (50Δ)', F(z.atm)) + kv('ATM IV', fmt(z.atmIv * 100, 1) + '%');
+        const a = GM.analysis(snaps(), st.idx, st.zExp === 1 ? 'one' : 'zero'), L = a.L;
+        const conf = (k, lv, nm) => k && lv != null ? `${nm} ${F(lv)} is ${pts(lv - k.K)} pts ${lv >= k.K ? 'above' : 'below'}` : '';
+        h += `<div class="sec">vs major gamma</div><div class="note" style="margin-top:4px">${[conf(z.c25, L.pos, 'Ceiling'), conf(z.p25, L.neg, 'Floor')].filter(Boolean).join('<br>') || '–'}</div>`;
+      }
+      h += `<div class="note">Why here: an out-of-the-money option bought near 25Δ gains value fastest until price reaches its strike. There delta is about 50 and gamma peaks. Past that point returns shrink and 0DTE time decay takes over, so buyers take profit. Their selling, plus the dealer unwinding his hedge, is why these strikes act as turning points.</div>`;
+    } else if (st.view === 'surf') {
+      h += `<div class="shead"><h3>3D surfaces</h3></div>` + tickerBlock() + updateBlock(c);
+      h += `<div class="sec">settings</div><div class="kv"><span>expiries up to</span><span><select id="surfDays" class="chip">${[7, 14, 30, 60, 90].map(d => `<option ${d === (st.surfDays || 30) ? 'selected' : ''} value="${d}">${d} days</option>`).join('')}</select></span></div><div class="kv"><span>strike range</span><span><select id="surfRange" class="chip">${[3, 5, 8, 12].map(d => `<option ${d === (st.surfRange || 5) ? 'selected' : ''} value="${d}">±${d}%</option>`).join('')}</select></span></div>`;
+      h += `<div class="note">Drag to rotate, scroll to zoom. Strikes are shown in ${st.useFut && futInfo(st.sym) ? futInfo(st.sym).fut : st.sym} terms.</div>`;
     } else {
       h += `<div class="shead"><h3>levels</h3></div><div class="note" style="margin-top:0">Key GEX levels for every loaded ticker, in futures terms. Drop all of today's files at once to fill this page.</div>`;
       h += `<div style="margin-top:14px">${tickerBlock()}</div>` + playBlock();
@@ -967,8 +1026,8 @@ GM.analysis = function (snaps, i, scope) {
   function bindSide() {
     const on = (sel, ev, fn) => document.querySelectorAll(sel).forEach(e => e.addEventListener(ev, fn));
     on('#symSel', 'change', e => { stopPlay(); setSym(e.target.value); });
-    on('.futtog button', 'click', e => { st.useFut = e.currentTarget.dataset.f === '1'; renderSide(); draw(); if (st.view === 'levels') renderLevels(); });
-    on('#futIn', 'change', e => { const v = parseFloat(e.target.value); if (v > 0) st.futPx[st.sym] = v; else delete st.futPx[st.sym]; renderSide(); draw(); if (st.view === 'levels') renderLevels(); });
+    on('.futtog button', 'click', e => { st.useFut = e.currentTarget.dataset.f === '1'; renderSide(); draw(); if (PANEL_VIEWS.includes(st.view)) renderPanel(); });
+    on('#futIn', 'change', e => { const v = parseFloat(e.target.value); if (v > 0) st.futPx[st.sym] = v; else delete st.futPx[st.sym]; renderSide(); draw(); if (PANEL_VIEWS.includes(st.view)) renderPanel(); });
     on('[data-cs]', 'click', e => { st.cScope = e.currentTarget.dataset.cs; renderSide(); draw(); });
     on('[data-gp]', 'click', e => { st.sMode = 'gexprofile'; st.sScope = e.currentTarget.dataset.gp; renderSide(); draw(); });
     on('[data-op]', 'click', e => { st.opScope = e.currentTarget.dataset.op; if (st.sMode === 'gexprofile') st.sMode = st.greek || 'profile'; renderSide(); draw(); });
@@ -979,6 +1038,9 @@ GM.analysis = function (snaps, i, scope) {
     on('#spBtn,#spTxt', 'click', () => { st.speed = st.speed >= 8 ? 1 : st.speed * 2; renderSide(); if (st.play) { stopPlay(); togglePlay(); } });
     on('#liveJump', 'click', () => { stopPlay(); st.idx = snaps().length - 1; renderSide(); draw(); });
     on('#daySel', 'change', e => { const [m, d, y] = e.target.value.split('/'); const day = `${y}-${m}-${d}`; const a = snaps(); let k = a.length - 1; while (k > 0 && GM.prep(a[k]).day !== day) k--; st.idx = k; stopPlay(); renderSide(); draw(); });
+    on('[data-ze]', 'click', e => { st.zExp = +e.currentTarget.dataset.ze; renderSide(); renderPanel(); });
+    on('#surfDays', 'change', e => { st.surfDays = +e.target.value; renderPanel(); });
+    on('#surfRange', 'change', e => { st.surfRange = +e.target.value; renderPanel(); });
     on('#hlpI', 'click', showHelp); on('#setI', 'click', showSettings);
   }
   function step(n) { const a = snaps(); if (!a.length) return; st.idx = Math.max(0, Math.min(a.length - 1, st.idx + n)); renderSide(); draw(); }
@@ -1043,7 +1105,7 @@ GM.analysis = function (snaps, i, scope) {
   function nearestStrike(price) { const r = GM.classic(cur(), st.cScope); let b = null; for (const s of r.strikes) if (!b || Math.abs(s.K - price) < Math.abs(b.K - price)) b = s; return b && b.K; }
   function renderSummary() {
     const el = $('sum'), c = cur();
-    if (st.pin == null || !c || st.view === 'levels') { if (el.style.display === 'block') { el.style.display = 'none'; if (st.view !== 'levels') draw(true); } return; }
+    if (st.pin == null || !c || PANEL_VIEWS.includes(st.view)) { if (el.style.display === 'block') { el.style.display = 'none'; if (!PANEL_VIEWS.includes(st.view)) draw(true); } return; }
     const price = st.pin, S = c.spot; let h = '';
     const hd = `<div class="hd"><b>${F(price)}</b><span class="mu">${st.sym} ${fmt(price, 2)} · ${price >= S ? '+' : '−'}${pts(price - S)} pts ${price >= S ? 'above' : 'below'} spot</span><button class="x" id="sumX" title="close">×</button></div>`;
     if (st.view === 'classic') {
@@ -1110,7 +1172,7 @@ GM.analysis = function (snaps, i, scope) {
   function niceStep(range, n) { const raw = range / n, p = Math.pow(10, Math.floor(Math.log10(raw))); return [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= raw) || 10 * p; }
 
   function draw(hoverOnly) {
-    if (st.view === 'levels') { $('sum').style.display = 'none'; return; }
+    if (PANEL_VIEWS.includes(st.view)) { $('sum').style.display = 'none'; return; }
     if (!hoverOnly) queueMicrotask(renderSummary);
     if (!W) resize();
     const c = cur();
@@ -1332,6 +1394,7 @@ GM.analysis = function (snaps, i, scope) {
     add(z0.oi.pos, `Call wall 0DTE ${mmdd(z0.exps[0])}`, '#8fe08f', 2, 1, 'today\'s expiry ceiling');
     add(z0.oi.neg, `Put wall 0DTE ${mmdd(z0.exps[0])}`, '#f08a8c', 2, 1, 'today\'s expiry floor');
     if (z0.hasVol) { add(z0.vol.pos, 'Vol ceiling 0DTE', '#5fd35f', 1, 2, 'today\'s traded major positive'); add(z0.vol.neg, 'Vol floor 0DTE', '#ff5a5f', 1, 2, 'today\'s traded major negative'); add(z0.vol.zero, 'Vol zero γ 0DTE', '#ffc04d', 1, 1, 'live battleground'); }
+    const zz = GM.zones(c, 0); if (zz) { if (zz.c25) add(zz.c25.K, `25Δ call ${mmdd(zz.exp)} · profit-take`, '#2fe0e6', 2, 1, 'call buyers book profit'); if (zz.p25) add(zz.p25.K, `25Δ put ${mmdd(zz.exp)} · profit-take`, '#c77dff', 2, 1, 'put buyers book profit'); }
     if (k.em) { add(c.spot + k.em.move, '+1σ', '#8b8b96', 3, 1, 'expected move'); add(c.spot - k.em.move, '−1σ', '#8b8b96', 3, 1, 'expected move'); }
     return out;
   }
@@ -1431,6 +1494,91 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     }));
   }
 
+  // ---------- profit zones: delta progression + gamma profile of the 25-delta options ----------
+  function lineChart(cv, o) {
+    const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; cv.width = r.width * dpr; cv.height = r.height * dpr;
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = r.width, H = r.height, M = { l: 58, r: 16, t: 34, b: 42 }, pw = W - M.l - M.r, ph = H - M.t - M.b;
+    g.fillStyle = css('--panel'); g.fillRect(0, 0, W, H);
+    const xs = o.xs, x0 = xs[0], x1 = xs[xs.length - 1], X = v => M.l + pw * (v - x0) / (x1 - x0), Y = v => M.t + ph * (1 - (v - o.y0) / (o.y1 - o.y0));
+    g.font = '10px "JetBrains Mono", monospace'; g.fillStyle = css('--axis'); g.strokeStyle = css('--grid'); g.lineWidth = 1;
+    const sx = niceStep(x1 - x0, 7); g.textAlign = 'center'; g.textBaseline = 'top';
+    for (let v = Math.ceil(x0 / sx) * sx; v <= x1; v += sx) { g.beginPath(); g.moveTo(X(v) + .5, M.t); g.lineTo(X(v) + .5, M.t + ph); g.stroke(); g.fillText(fmt(v, sx < 1 ? 1 : 0).replace(/,/g, ''), X(v), M.t + ph + 6); }
+    const sy = niceStep(o.y1 - o.y0, 5); g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (let v = Math.ceil(o.y0 / sy) * sy; v <= o.y1 + 1e-9; v += sy) { g.beginPath(); g.moveTo(M.l, Y(v) + .5); g.lineTo(M.l + pw, Y(v) + .5); g.stroke(); g.fillText(o.yfmt ? o.yfmt(v) : fmt(v, 0), M.l - 6, Y(v)); }
+    g.fillStyle = css('--text'); g.font = '600 13px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText(o.title, M.l + pw / 2, 20);
+    g.font = '11px Inter, sans-serif'; g.fillStyle = css('--muted'); g.fillText(o.xlab, M.l + pw / 2, H - 8);
+    g.save(); g.translate(14, M.t + ph / 2); g.rotate(-Math.PI / 2); g.fillText(o.ylab, 0, 0); g.restore();
+    const dashed = (x, col, lab, top) => { g.strokeStyle = col; g.setLineDash([5, 4]); g.lineWidth = 1.2; g.beginPath(); g.moveTo(X(x) + .5, M.t); g.lineTo(X(x) + .5, M.t + ph); g.stroke(); g.setLineDash([]); if (lab) { g.fillStyle = col; g.font = '600 10px "JetBrains Mono", monospace'; g.textAlign = 'left'; g.fillText(lab, X(x) + 4, M.t + 12 + (top || 0)); } };
+    for (const v of o.vlines || []) dashed(v.x, v.c, v.lab, v.top);
+    for (const hl of o.hlines || []) { g.strokeStyle = hl.c; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(M.l, Y(hl.y) + .5); g.lineTo(M.l + pw, Y(hl.y) + .5); g.stroke(); g.setLineDash([]); }
+    for (const s of o.series) { g.strokeStyle = s.c; g.lineWidth = 2.2; g.beginPath(); let st0 = false; s.ys.forEach((v, i) => { if (v == null) return; const px = X(xs[i]), py = Y(v); st0 ? g.lineTo(px, py) : g.moveTo(px, py); st0 = true; }); g.stroke(); }
+    for (const m of o.marks || []) { const px = X(m.x), py = Y(m.y); g.strokeStyle = m.c; g.lineWidth = 2.5; g.beginPath(); g.moveTo(px - 6, py - 6); g.lineTo(px + 6, py + 6); g.moveTo(px + 6, py - 6); g.lineTo(px - 6, py + 6); g.stroke(); if (m.lab) { g.fillStyle = m.c; g.font = '600 10px "JetBrains Mono", monospace'; g.textAlign = m.left ? 'right' : 'left'; g.fillText(m.lab, px + (m.left ? -10 : 10), py - 8); } }
+    // legend
+    const lg = o.legend || []; if (lg.length) { const bw = 200, bh = lg.length * 16 + 8, bx = M.l + pw / 2 - bw / 2, by = M.t + ph - bh - 6; g.fillStyle = css('--panel'); g.globalAlpha = 0.88; g.fillRect(bx, by, bw, bh); g.globalAlpha = 1; g.strokeStyle = css('--line'); g.strokeRect(bx + .5, by + .5, bw, bh); g.textAlign = 'left'; g.textBaseline = 'middle'; g.font = '11px Inter, sans-serif'; lg.forEach((l, i) => { const yy = by + 12 + i * 16; g.fillStyle = l.c; g.fillRect(bx + 8, yy - 1.5, 14, 3); g.fillStyle = css('--text'); g.fillText(l.t, bx + 28, yy); }); }
+  }
+  function renderZones() {
+    const el = $('levels'), c = cur();
+    if (!c) { el.innerHTML = '<h2>Profit zones</h2><div class="sub">Load a file first.</div>'; return; }
+    const z = GM.zones(c, st.zExp || 0);
+    if (!z || (!z.c25 && !z.p25)) { el.innerHTML = '<h2>Profit zones</h2><div class="sub">Not enough priced options for this expiry.</div>'; return; }
+    const lab = st.useFut && futInfo(st.sym) ? futInfo(st.sym).fut : st.sym;
+    const hrs = z.T * 365 * 24, tl = hrs < 24 ? `${Math.floor(hrs)}h ${Math.round((hrs % 1) * 60)}m` : `${(hrs / 24).toFixed(1)} days`;
+    el.innerHTML = `<h2>Profit-taking zones · ${tickerLabel(st.sym)} · ${mmdd(z.exp)} expiry</h2>
+      <div class="sub">Option buyers enter around the <b>25Δ</b> strike. Their option gains fastest as price runs to that strike, where delta reaches ~50 and <b>gamma peaks</b>. That is where they book profit (and the dealer unwinds his hedge). Past it, returns flatten and time decay (${tl} left) takes over. Computed from Cboe's live IVs with Black-Scholes; prices in ${lab}.</div>
+      <div class="zgrid"><canvas id="zDelta"></canvas><canvas id="zGamma"></canvas></div>
+      <div class="zcards">
+        ${z.c25 ? `<div class="zc"><div class="c-cy zt">Upside profit-taking · ${F(z.c25.K)}</div>25Δ call of the ${mmdd(z.exp)} expiry (${st.sym} ${fmt(z.c25.K, 2)}, IV ${fmt(z.c25.iv * 100, 1)}%). It is ${pts(z.c25.K - z.S)} pts above spot. Call buyers' gamma peaks there, so expect profit-taking into it: a ceiling or target. Traded nearby: ${fmt(z.flowC.vol, 0)} contracts today (OI ${fmt(z.flowC.oi, 0)}).</div>` : ''}
+        ${z.p25 ? `<div class="zc"><div class="c-pu zt">Downside profit-taking · ${F(z.p25.K)}</div>25Δ put of the ${mmdd(z.exp)} expiry (${st.sym} ${fmt(z.p25.K, 2)}, IV ${fmt(z.p25.iv * 100, 1)}%). It is ${pts(z.S - z.p25.K)} pts below spot. Put buyers book profit as price reaches it, the dealer buys back his short futures hedge, and price tends to bounce: a floor or target. Traded nearby: ${fmt(z.flowP.vol, 0)} contracts today (OI ${fmt(z.flowP.oi, 0)}).</div>` : ''}
+      </div>`;
+    const xs = z.curve.map(p => conv(p.P)), Sd = conv(z.S);
+    const dC = z.curve.map(p => p.dc ?? null), dP = z.curve.map(p => p.dp ?? null);
+    const gmax = Math.max(...z.curve.map(p => Math.max(p.gc || 0, p.gp || 0)));
+    const gC = z.curve.map(p => p.gc == null ? null : p.gc / gmax * 10), gP = z.curve.map(p => p.gp == null ? null : p.gp / gmax * 10);
+    const cyan = css('--cyan'), pur = css('--purple'), mut = css('--muted'), gold = '#f2b233';
+    const at = (arr, x) => { let b = 0; for (let i = 1; i < xs.length; i++) if (Math.abs(xs[i] - x) < Math.abs(xs[b] - x)) b = i; return arr[b]; };
+    const vl = [{ x: Sd, c: css('--axis'), lab: `spot ${fmt(Sd, 2)}` }];
+    if (z.c25) vl.push({ x: conv(z.c25.K), c: cyan, lab: `25Δ call ${fmt(conv(z.c25.K), 2)}`, top: 14 });
+    if (z.p25) vl.push({ x: conv(z.p25.K), c: pur, lab: `25Δ put ${fmt(conv(z.p25.K), 2)}`, top: 28 });
+    const marksD = [], marksG = [];
+    if (z.c25) { marksD.push({ x: Sd, y: at(dC, Sd), c: '#e5383b', lab: '25Δ now' }, { x: conv(z.c25.K), y: at(dC, conv(z.c25.K)), c: cyan, lab: '≈50Δ: profit-taking' }); marksG.push({ x: conv(z.c25.K), y: at(gC, conv(z.c25.K)), c: cyan, lab: 'gamma peak: take profit' }); }
+    if (z.p25) { marksD.push({ x: conv(z.p25.K), y: at(dP, conv(z.p25.K)), c: pur, lab: 'take profit ≈50Δ', left: true }); marksG.push({ x: conv(z.p25.K), y: at(gP, conv(z.p25.K)), c: pur, lab: 'gamma peak: take profit', left: true }); }
+    const draw2 = () => {
+      lineChart($('zDelta'), { title: 'Delta progression of the 25Δ options as price moves', xlab: `${lab} price`, ylab: 'Delta (%)', xs, y0: 0, y1: 100, series: [{ ys: dC, c: gold }, { ys: dP, c: '#ff7a59' }], vlines: vl, hlines: [{ y: 25, c: '#e5383b' }, { y: 50, c: '#5a7bf0' }], marks: marksD, legend: [{ c: gold, t: '25Δ call delta (price ↑)' }, { c: '#ff7a59', t: '25Δ put |delta| (price ↓)' }, { c: '#e5383b', t: '25 delta level' }, { c: '#5a7bf0', t: '50 delta (ATM) level' }] });
+      lineChart($('zGamma'), { title: 'Gamma profile: where profit-taking happens', xlab: `${lab} price`, ylab: 'Gamma (relative, peak = 10)', xs, y0: 0, y1: 10.8, series: [{ ys: gC, c: cyan }, { ys: gP, c: pur }], vlines: vl, marks: marksG, yfmt: v => v.toFixed(0), legend: [{ c: cyan, t: '25Δ call gamma' }, { c: pur, t: '25Δ put gamma' }] });
+    };
+    requestAnimationFrame(draw2);
+    renderZones._draw = draw2;
+    if (!renderZones._ro) { let tmr; renderZones._ro = new ResizeObserver(() => { clearTimeout(tmr); tmr = setTimeout(() => { if (st.view === 'zones' && renderZones._draw && $('zDelta')) renderZones._draw(); }, 120); }); renderZones._ro.observe($('levels')); }
+  }
+
+  // ---------- 3D surfaces (Plotly, loaded on demand) ----------
+  let plotlyP = null;
+  const loadPlotly = () => plotlyP || (plotlyP = new Promise((res, rej) => { if (window.Plotly) return res(); const s = document.createElement('script'); s.src = 'https://cdn.plot.ly/plotly-2.35.2.min.js'; s.onload = res; s.onerror = () => { plotlyP = null; rej(new Error('Could not load Plotly')); }; document.head.appendChild(s); }));
+  function renderSurf() {
+    const el = $('levels'), c = cur();
+    if (!c) { el.innerHTML = '<h2>3D surfaces</h2><div class="sub">Load a file first.</div>'; return; }
+    el.innerHTML = `<h2>3D surfaces · ${tickerLabel(st.sym)}</h2><div class="sub">Strike × days to expiry. GEX is the naive dealer convention (calls +, puts −), in $M per 1% move. Volume is contracts traded today. IV comes from out-of-the-money options.</div>
+      <div class="sgrid"><div class="sbox"><div class="stl">GEX by open interest</div><div id="sfOI" class="splot"></div></div><div class="sbox"><div class="stl">GEX by volume (today's flow)</div><div id="sfVG" class="splot"></div></div><div class="sbox"><div class="stl">Volume (contracts)</div><div id="sfV" class="splot"></div></div><div class="sbox"><div class="stl">Implied volatility</div><div id="sfIV" class="splot"></div></div></div>`;
+    loadPlotly().then(() => {
+      const S = GEX.surfaces(c, { maxDays: st.surfDays || 30, rangePct: st.surfRange || 5, q: GM.QDIV[st.sym] ?? 0.012 });
+      if (!S.exps.length) return;
+      const dark = !document.documentElement.classList.contains('light'), mut = css('--muted'), grid = css('--line');
+      const ks = S.strikes.map(k => +conv(k).toFixed(2));
+      const scene = zt => ({ xaxis: { title: { text: st.useFut && futInfo(st.sym) ? futInfo(st.sym).fut : st.sym }, gridcolor: grid, color: mut, backgroundcolor: 'rgba(0,0,0,0)' }, yaxis: { title: { text: 'Days to expiry' }, gridcolor: grid, color: mut, backgroundcolor: 'rgba(0,0,0,0)' }, zaxis: { title: { text: zt }, gridcolor: grid, color: mut, backgroundcolor: 'rgba(0,0,0,0)' }, camera: { eye: { x: 1.5, y: -1.6, z: 0.85 } }, aspectmode: 'manual', aspectratio: { x: 1.4, y: 1, z: 0.7 } });
+      const lay = zt => ({ paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { color: mut, family: 'Inter, sans-serif', size: 11 }, margin: { l: 0, r: 0, t: 0, b: 0 }, scene: scene(zt) });
+      const cfg = { displaylogo: false, responsive: true };
+      const div = (m, f = 1e6) => m.map(r => r.map(v => v == null ? null : v / f));
+      const sym = (z) => { const m = Math.max(1, ...z.flat().filter(v => v != null).map(Math.abs)); return [-m, m]; };
+      const gexScale = [[0, '#7f1d1d'], [0.35, '#e5383b'], [0.5, dark ? '#1d1d24' : '#eceef1'], [0.65, '#5fd35f'], [1, '#14532d']];
+      const zOI = div(S.gex), zVG = div(S.gexV), [a1, b1] = sym(zOI), [a2, b2] = sym(zVG);
+      Plotly.react('sfOI', [{ type: 'surface', x: ks, y: S.dtes, z: zOI, cmin: a1, cmax: b1, colorscale: gexScale, colorbar: { title: { text: '$M' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>GEX %{z:,.1f}M<extra></extra>', contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } } }], lay('GEX $M'), cfg);
+      Plotly.react('sfVG', [{ type: 'surface', x: ks, y: S.dtes, z: zVG, cmin: a2, cmax: b2, colorscale: gexScale, colorbar: { title: { text: '$M' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>Vol GEX %{z:,.1f}M<extra></extra>', contours: { z: { show: true, usecolormap: true, project: { z: true }, width: 1 } } }], lay('Vol GEX $M'), cfg);
+      Plotly.react('sfV', [{ type: 'surface', x: ks, y: S.dtes, z: S.volm, colorscale: [[0, '#0d0887'], [0.25, '#6a00a8'], [0.5, '#b12a90'], [0.75, '#e16462'], [1, '#fca636']], colorbar: { title: { text: 'contracts' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>%{z:,.0f} contracts<extra></extra>' }], lay('Volume'), cfg);
+      Plotly.react('sfIV', [{ type: 'surface', x: ks, y: S.dtes, z: S.iv.map(r => r.map(v => v == null ? null : v * 100)), colorscale: 'Viridis', colorbar: { title: { text: 'IV %' }, thickness: 10, len: 0.7 }, hovertemplate: 'K %{x}<br>DTE %{y:.1f}<br>IV %{z:.1f}%<extra></extra>' }], lay('IV %'), cfg);
+    }).catch(e => { el.insertAdjacentHTML('beforeend', `<div class="sub c-rd">${e.message}. The 3D view needs internet access to cdn.plot.ly.</div>`); });
+  }
+
   // ---------- modals ----------
   function modal(html) { $('modalBox').innerHTML = `<button class="x" onclick="document.getElementById('modal').style.display='none'">×</button>` + html; $('modal').style.display = 'flex'; }
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') $('modal').style.display = 'none'; });
@@ -1445,6 +1593,8 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     <li><b>Confirmation at a level:</b> at the floor you want max change turning green. At the ceiling, turning red. If the floor itself moves lower, puts are being added and the move may continue.</li>
     <li><b>Clock:</b> a level hit at 10–11 am is stronger than at 3 pm. 0DTE decay makes late targets harder to reach. Many traders follow SPX levels even for NQ.</li></ul>
     <p class="mu">Hover any line or bar for an explanation. Click any price for a full read at the bottom. Esc closes it.</p>
+    <h4>profit zones</h4><p>For today's (or tomorrow's) expiry the terminal finds the real <b>25Δ call</b> and <b>25Δ put</b> strikes from Cboe's IVs. A buyer of that option gains fastest as price runs to the strike, where delta reaches ~50 and gamma peaks. That is where profit is booked and the dealer unwinds, so these strikes act as targets and turning points (the "25 / 50 delta" slide in the video). They also appear as cyan and violet lines on the levels charts and in the TradingView script.</p>
+    <h4>3d</h4><p>Strike × expiry surfaces: GEX by open interest, GEX by today's volume, traded volume, and implied volatility. Drag to rotate.</p>
     <h4>state</h4><p>GexBot classifies every option trade as taker-long or taker-short from tick data. Cboe's free data has no trade tape, so this uses a <b>proxy</b>: each snapshot's new volume is split by where that contract's last trade sits between bid and ask (at the ask = bought, at the bid = sold). It is cumulative through the session, so it gets better with more live snapshots.</p>
     <ul><li><b>options profile</b> (no toggle): taker long (right) and short (left) contracts — calls orange, puts purple.</li>
     <li><b>delta</b> (DEX): taker net × Δ × 100 × spot.</li><li><b>gamma</b> (convexity): taker net × Γ × 100 × spot² × 1% — cyan long gamma, purple short gamma.</li>
