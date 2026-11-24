@@ -126,6 +126,10 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
 .splot{height:calc(50vh - 95px);min-height:300px}
 .scap{font-size:11.5px;line-height:1.5;color:var(--text);padding:8px 6px 4px;border-top:1px solid var(--line);margin-top:4px}
 @media (max-width:1100px){.zgrid,.zcards,.sgrid{grid-template-columns:1fr}.zgrid{height:auto}.zgrid canvas{height:380px}}
+.trwrap{position:relative;height:calc(100vh - 82px);min-height:420px}
+#trCv{width:100%;height:100%;display:block;cursor:crosshair;border:1px solid var(--line);border-radius:8px}
+.trtip{position:absolute;display:none;pointer-events:none;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:11.5px;line-height:1.45;max-width:320px;z-index:5}
+.trtip .tt{font-weight:600;font-family:var(--mono);margin-bottom:2px}
 .lvsyms{display:flex;gap:6px;margin:0 0 12px}
 .lvsyms button{background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:12px;color:var(--muted)}
 .lvsyms button.on{color:var(--text);background:var(--btnOn)}
@@ -194,6 +198,7 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
     <span class="sep">|</span>
     <a data-v="levels">levels</a>
     <a data-v="zones">profit zones</a>
+    <a data-v="trace">trace</a>
     <a data-v="surf">3d</a>
   </div>
   <div id="topr">
@@ -821,6 +826,30 @@ GM.zones = function (snap, ei) {
   }
   return { S, T, exp, ei, c25, p25, c50, atm: atm.K, atmIv, curve, flowC: near(c25, 'C'), flowP: near(p25, 'P') };
 };
+
+// ===== TRACE-style heatmap: dealer exposure at hypothetical prices (naive dealer: long calls, short puts) =====
+// mode: gamma ($ per 1% move), delta (dealer hedge flow $ needed if price moved there from spot), charm (dealer hedge flow $/hour from decay at that price)
+GM.traceColumn = function (snap, prices, mode, scope) {
+  const P = GM.prep(snap), S = P.S, q = P.q, r = 0.04, key = mode + scope + prices[0] + ':' + prices[prices.length - 1] + ':' + prices.length;
+  snap._tr = snap._tr || {}; if (snap._tr[key]) return snap._tr[key];
+  const cs = P.cs.filter(c => c.oi > 0 && c.iv > 0.005 && c.iv < 4 && Math.abs(c.K / S - 1) < 0.1 && (scope === 'zero' ? c.ei === 0 : c.dte <= 30));
+  const SQ = Math.sqrt(2 * Math.PI), npdf = x => Math.exp(-0.5 * x * x) / SQ;
+  const ncdf = x => { const t = 1 / (1 + 0.2316419 * Math.abs(x)), d = 0.3989423 * Math.exp(-x * x / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; };
+  const pre = cs.map(c => { const st = c.iv * Math.sqrt(c.T); return { K: c.K, T: c.T, s: c.iv, st, eq: Math.exp(-q * c.T), drift: (r - q + 0.5 * c.iv * c.iv) * c.T, pos: (c.type === 'C' ? 1 : -1) * c.oi * 100, call: c.type === 'C' }; });
+  const deltaAt = x => { let D = 0; for (const o of pre) { const d1 = (Math.log(x / o.K) + o.drift) / o.st; const dl = o.call ? o.eq * ncdf(d1) : o.eq * (ncdf(d1) - 1); D += o.pos * dl * x; } return D; };
+  const out = new Float64Array(prices.length);
+  if (mode === 'delta') { const D0 = deltaAt(S); prices.forEach((x, i) => { out[i] = -(deltaAt(x) - D0); }); }
+  else prices.forEach((x, i) => {
+    let v = 0;
+    for (const o of pre) {
+      const d1 = (Math.log(x / o.K) + o.drift) / o.st, nd = npdf(d1);
+      if (mode === 'gamma') v += o.pos * o.eq * nd / (x * o.st) * x * x * 0.01;
+      else { const d2 = d1 - o.st, common = o.eq * nd * (2 * (r - q) * o.T - d2 * o.st) / (2 * o.T * o.st); const ch = o.call ? q * o.eq * ncdf(d1) - common : -q * o.eq * ncdf(-d1) - common; v += -o.pos * ch * x / 8760; }
+    }
+    out[i] = v;
+  });
+  snap._tr[key] = out; return out;
+};
 </script>
 <script>// ===== GEX terminal UI (GexBot-style classic + state + levels) =====
 (() => {
@@ -935,8 +964,8 @@ GM.zones = function (snap, ei) {
   }
 
   // ---------- views ----------
-  const PANEL_VIEWS = ['levels', 'zones', 'surf'];
-  function renderPanel() { if (st.view === 'levels') renderLevels(); else if (st.view === 'zones') renderZones(); else if (st.view === 'surf') renderSurf(); }
+  const PANEL_VIEWS = ['levels', 'zones', 'surf', 'trace'];
+  function renderPanel() { if (st.view === 'levels') renderLevels(); else if (st.view === 'zones') renderZones(); else if (st.view === 'surf') renderSurf(); else if (st.view === 'trace') renderTrace(); }
   function selectView(v) {
     st.view = v; document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
     const panel = PANEL_VIEWS.includes(v);
@@ -1016,6 +1045,13 @@ GM.zones = function (snap, ei) {
         h += `<div class="sec">vs major gamma</div><div class="note" style="margin-top:4px">${[conf(z.c25, L.pos, 'Ceiling'), conf(z.p25, L.neg, 'Floor')].filter(Boolean).join('<br>') || '–'}</div>`;
       }
       h += `<div class="note">Why here: an out-of-the-money option bought near 25Δ gains value fastest until price reaches its strike. There delta is about 50 and gamma peaks. Past that point returns shrink and 0DTE time decay takes over, so buyers take profit. Their selling, plus the dealer unwinding his hedge, is why these strikes act as turning points.</div>`;
+    } else if (st.view === 'trace') {
+      const tm = st.trMode || 'gamma', ts = st.trScope || 'zero';
+      h += `<div class="shead"><h3>trace</h3></div>` + tickerBlock();
+      h += `<div class="sec">model</div><div class="seg">${[['gamma', 'Gamma'], ['delta', 'Delta pressure'], ['charm', 'Charm pressure']].map(([k, t]) => `<button data-trm="${k}" class="${tm === k ? 'on' : ''}">${t}</button>`).join('')}</div>`;
+      h += `<div class="sec">expiries</div><div class="seg">${[['zero', '0DTE only'], ['w30', 'all ≤ 30 days']].map(([k, t]) => `<button data-trs="${k}" class="${ts === k ? 'on' : ''}">${t}</button>`).join('')}</div>`;
+      h += updateBlock(c) + `<div id="trStats"></div>` + playBlock();
+      h += `<div class="note">${{ gamma: '<b>Gamma:</b> dealer gamma if price were at each level (naive dealer: long calls, short puts). <span style="color:#ff5a4f">Red</span> = positive gamma: dealers lean against moves, so price slows, stalls or bounces. <span style="color:#3d8bff">Blue</span> = negative gamma: dealers chase, so price moves swiftly through. Deeper colour means stronger.', delta: '<b>Delta pressure:</b> the futures dealers would have to trade to stay hedged if price moved to each level. <span style="color:#3d8bff">Blue</span> = dealers would buy, so above spot this can extend a rally. <span style="color:#ff5a4f">Red</span> = dealers would sell, so below spot this can extend a drop.', charm: '<b>Charm pressure:</b> hedging flow per hour from time decay alone, if price sat at each level. <span style="color:#3d8bff">Blue</span> = dealers buy as the clock runs (support drift). <span style="color:#ff5a4f">Red</span> = dealers sell (downward drift). It grows into the close.' }[tm]}<br><br>Same idea as SpotGamma's TRACE, rebuilt from Cboe data (~15 min delayed). Their exact models are private, so the shading is our own estimate.</div>`;
     } else if (st.view === 'surf') {
       h += `<div class="shead"><h3>3D surfaces</h3></div>` + tickerBlock() + updateBlock(c);
       h += `<div class="sec">settings</div><div class="kv"><span>expiries up to</span><span><select id="surfDays" class="chip">${[7, 14, 30, 60, 90].map(d => `<option ${d === (st.surfDays || 30) ? 'selected' : ''} value="${d}">${d} days</option>`).join('')}</select></span></div><div class="kv"><span>strike range</span><span><select id="surfRange" class="chip">${[3, 5, 8, 12].map(d => `<option ${d === (st.surfRange || 5) ? 'selected' : ''} value="${d}">±${d}%</option>`).join('')}</select></span></div>`;
@@ -1036,21 +1072,23 @@ GM.zones = function (snap, ei) {
     on('[data-op]', 'click', e => { st.opScope = e.currentTarget.dataset.op; if (st.sMode === 'gexprofile') st.sMode = st.greek || 'profile'; renderSide(); draw(); });
     on('[data-gk]', 'change', e => { const g = e.target.dataset.gk; if (e.target.checked) { st.sMode = g; st.greek = g; } else { st.sMode = 'profile'; st.greek = 'profile'; } renderSide(); draw(); });
     on('#clrBtn', 'click', () => { if (confirm('Clear every loaded snapshot (and the saved live session)?')) clearAll(); });
-    on('#slider', 'input', e => { stopPlay(); st.idx = +e.target.value; renderSide(); draw(); });
+    on('#slider', 'input', e => { stopPlay(); st.idx = +e.target.value; renderSide(); draw(); if (st.view === 'trace') renderTrace(); });
     on('[data-p]', 'click', e => { const p = e.currentTarget.dataset.p; if (p === 'play') togglePlay(); else step(+p); });
     on('#spBtn,#spTxt', 'click', () => { st.speed = st.speed >= 8 ? 1 : st.speed * 2; renderSide(); if (st.play) { stopPlay(); togglePlay(); } });
     on('#liveJump', 'click', () => { stopPlay(); st.idx = snaps().length - 1; renderSide(); draw(); });
     on('#daySel', 'change', e => { const [m, d, y] = e.target.value.split('/'); const day = `${y}-${m}-${d}`; const a = snaps(); let k = a.length - 1; while (k > 0 && GM.prep(a[k]).day !== day) k--; st.idx = k; stopPlay(); renderSide(); draw(); });
+    on('[data-trm]', 'click', e => { st.trMode = e.currentTarget.dataset.trm; renderSide(); renderPanel(); });
+    on('[data-trs]', 'click', e => { st.trScope = e.currentTarget.dataset.trs; renderSide(); renderPanel(); });
     on('[data-ze]', 'click', e => { st.zExp = +e.currentTarget.dataset.ze; renderSide(); renderPanel(); });
     on('#surfDays', 'change', e => { st.surfDays = +e.target.value; renderPanel(); });
     on('#surfRange', 'change', e => { st.surfRange = +e.target.value; renderPanel(); });
     on('#hlpI', 'click', showHelp); on('#setI', 'click', showSettings);
   }
-  function step(n) { const a = snaps(); if (!a.length) return; st.idx = Math.max(0, Math.min(a.length - 1, st.idx + n)); renderSide(); draw(); }
+  function step(n) { const a = snaps(); if (!a.length) return; st.idx = Math.max(0, Math.min(a.length - 1, st.idx + n)); renderSide(); draw(); if (st.view === 'trace') renderTrace(); }
   function togglePlay() {
     if (st.play) return stopPlay();
     if (st.idx >= snaps().length - 1) st.idx = 0;
-    st.play = setInterval(() => { if (st.idx >= snaps().length - 1) { stopPlay(); renderSide(); return; } st.idx++; renderSide(); draw(); }, 700 / st.speed);
+    st.play = setInterval(() => { if (st.idx >= snaps().length - 1) { stopPlay(); renderSide(); return; } st.idx++; renderSide(); draw(); if (st.view === 'trace') renderTrace(); }, 700 / st.speed);
     renderSide();
   }
   function stopPlay() { if (st.play) { clearInterval(st.play); st.play = null; } }
@@ -1558,6 +1596,96 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     if (!renderZones._ro) { let tmr; renderZones._ro = new ResizeObserver(() => { clearTimeout(tmr); tmr = setTimeout(() => { if (st.view === 'zones' && renderZones._draw && $('zDelta')) renderZones._draw(); }, 120); }); renderZones._ro.observe($('levels')); }
   }
 
+  // ---------- TRACE-style heatmap ----------
+  function renderTrace() {
+    const el = $('levels'), c = cur();
+    if (!c) { el.innerHTML = '<h2>Trace</h2><div class="sub">Load a file first (intraday files or the live link give a full day of columns).</div>'; return; }
+    if (!$('trCv')) { el.innerHTML = `<div class="trwrap"><canvas id="trCv"></canvas><div id="trTip" class="trtip"></div></div>`; bindTrace(); }
+    drawTrace();
+  }
+  function bindTrace() {
+    const cvT = $('trCv');
+    cvT.addEventListener('mousemove', e => { const r = cvT.getBoundingClientRect(); st.trHover = { x: e.clientX - r.left, y: e.clientY - r.top }; drawTrace(true); });
+    cvT.addEventListener('mouseleave', () => { st.trHover = null; $('trTip').style.display = 'none'; drawTrace(true); });
+    cvT.addEventListener('wheel', e => { e.preventDefault(); st.trZoom = Math.min(4, Math.max(0.25, (st.trZoom || 1) * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); delete trCache.key; drawTrace(); }, { passive: false });
+    cvT.addEventListener('dblclick', () => { st.trZoom = 1; delete trCache.key; drawTrace(); });
+    new ResizeObserver(() => { if (st.view === 'trace' && $('trCv')) drawTrace(); }).observe(cvT.parentElement);
+  }
+  const trCache = {};
+  function drawTrace(hoverOnly) {
+    const cvT = $('trCv'); if (!cvT) return; const c = cur(); if (!c) return;
+    const r = cvT.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; if (cvT.width !== Math.round(r.width * dpr) || cvT.height !== Math.round(r.height * dpr)) { cvT.width = Math.round(r.width * dpr); cvT.height = Math.round(r.height * dpr); }
+    const g = cvT.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = r.width, H = r.height, M = { l: 64, r: 70, t: 30, b: 30 }, pw = W - M.l - M.r, ph = H - M.t - M.b;
+    const mode = st.trMode || 'gamma', scope = st.trScope || 'zero', sym = st.sym, day = GM.prep(c).day;
+    const ss = snaps().filter(s => GM.prep(s).day === day), upto = ss.filter(s => s.asOf <= c.asOf);
+    const ref = ss[ss.length - 1].spot, half = ref * (sym === 'GLD' ? 0.03 : 0.015) * (st.trZoom || 1), N = 110;
+    const prices = []; for (let i = 0; i < N; i++) prices.push(ref - half + 2 * half * i / (N - 1));
+    // columns: up to 80 snapshots of the session (evenly sampled), each computed once and cached on the snapshot
+    const stride = Math.max(1, Math.ceil(upto.length / 80)), cols = []; for (let k = 0; k < upto.length; k += stride) cols.push(upto[k]); if (cols[cols.length - 1] !== upto[upto.length - 1]) cols.push(upto[upto.length - 1]);
+    const vals = cols.map(s => GM.traceColumn(s, prices, mode, scope));
+    const absAll = []; for (const v of vals) for (const x of v) absAll.push(Math.abs(x)); absAll.sort((p, q) => p - q);
+    const mx = absAll.length ? absAll[Math.floor(absAll.length * 0.97)] || absAll[absAll.length - 1] : 0, mxTrue = absAll.length ? absAll[absAll.length - 1] : 0;
+    const [t0, t1] = timeRange(day, ss), X = t => M.l + pw * (t - t0) / (t1 - t0);
+    const lo = conv(prices[0]), hi = conv(prices[N - 1]), Y = v => M.t + ph * (1 - (v - lo) / (hi - lo)), Yinv = y => lo + (1 - (y - M.t) / ph) * (hi - lo);
+    g.fillStyle = css('--bg'); g.fillRect(0, 0, W, H);
+    const dark = !document.documentElement.classList.contains('light');
+    const colr = v => { const a = mx ? Math.pow(Math.min(1, Math.abs(v) / mx), 1.15) : 0; const base = dark ? [10, 10, 14] : [250, 250, 252]; const tgt = v >= 0 ? [255, 70, 60] : [40, 125, 255]; return `rgb(${Math.round(base[0] + (tgt[0] - base[0]) * a)},${Math.round(base[1] + (tgt[1] - base[1]) * a)},${Math.round(base[2] + (tgt[2] - base[2]) * a)})`; };
+    // heat cells
+    const rowH = ph / (N - 1) + 1;
+    cols.forEach((s, k) => {
+      const xa = cols.length === 1 ? X(Math.min(t0 + (t1 - t0) * 0.03, s.asOf)) : X(s.asOf), xb = k + 1 < cols.length ? X(cols[k + 1].asOf) : (cols.length === 1 ? X(t1) - 2 : X(Math.min(t1, s.asOf + Math.max(60000, (s.asOf - cols[Math.max(0, k - 1)].asOf) || 300000))));
+      const v = vals[k];
+      for (let i = 0; i < N; i++) { g.fillStyle = colr(v[i]); g.fillRect(xa, Y(conv(prices[i])) - rowH / 2, Math.max(1, xb - xa + 0.5), rowH); }
+    });
+    // grid + axes
+    g.font = '10px "JetBrains Mono", monospace'; g.fillStyle = css('--axis'); g.textAlign = 'right'; g.textBaseline = 'middle'; g.strokeStyle = dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+    const sy = niceStep(hi - lo, Math.max(6, Math.floor(ph / 30))); for (let v = Math.ceil(lo / sy) * sy; v <= hi; v += sy) { g.beginPath(); g.moveTo(M.l, Y(v) + .5); g.lineTo(M.l + pw, Y(v) + .5); g.stroke(); g.fillText(fmt(v, sy < 1 ? 2 : 0).replace(/,/g, ''), M.l - 8, Y(v)); }
+    g.textAlign = 'center'; g.textBaseline = 'top'; const nT = Math.max(3, Math.floor(pw / 110)); for (let k = 0; k <= nT; k++) { const t = t0 + (t1 - t0) * (k + 0.5) / (nT + 1); g.fillText(etTime(t).replace(/(\d+:\d+):\d+ /, '$1 ').toLowerCase(), X(t), H - M.b + 8); }
+    // candles (Cboe) or spot path
+    const cc = candlesFor(sym, day, c.asOf);
+    g.save(); g.beginPath(); g.rect(M.l, M.t, pw, ph); g.clip();
+    if (cc.length >= 3) {
+      const iv = (st.iv || 5) * 60000, bk = new Map(); for (const k of cc) { const b = Math.floor(k.t / iv) * iv, e = bk.get(b), o = conv(k.o), hh = conv(k.h), ll = conv(k.l), cl = conv(k.c); if (!e) bk.set(b, { o, h: hh, l: ll, c: cl }); else { e.h = Math.max(e.h, hh); e.l = Math.min(e.l, ll); e.c = cl; } }
+      const bw = Math.max(1.5, Math.min(10, pw * iv / (t1 - t0) * 0.65));
+      for (const [b, e] of bk) { const xx = X(b + iv / 2), up = e.c >= e.o; g.strokeStyle = g.fillStyle = up ? '#e8e8ec' : '#8a8a96'; if (!dark) g.strokeStyle = g.fillStyle = up ? '#15161a' : '#7a7d86'; g.lineWidth = 1; g.beginPath(); g.moveTo(xx, Y(e.h)); g.lineTo(xx, Y(e.l)); g.stroke(); g.fillRect(xx - bw / 2, Math.min(Y(e.o), Y(e.c)), bw, Math.max(1, Math.abs(Y(e.c) - Y(e.o)))); }
+    } else { g.strokeStyle = dark ? '#fff' : '#000'; g.lineWidth = 1.6; g.beginPath(); upto.forEach((s, k) => { const xx = X(s.asOf), yy = Y(conv(s.spot)); k ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }); g.stroke(); for (const s of upto) { g.fillStyle = dark ? '#fff' : '#000'; g.beginPath(); g.arc(X(s.asOf), Y(conv(s.spot)), 2.6, 0, 7); g.fill(); } }
+    g.restore();
+    // spot line + label
+    const Ys = Y(conv(c.spot)); g.strokeStyle = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.5)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(M.l, Ys); g.lineTo(M.l + pw, Ys); g.stroke(); g.setLineDash([]);
+    g.fillStyle = css('--spotbg'); g.fillRect(2, Ys - 8, M.l - 6, 16); g.fillStyle = css('--spotfg'); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '600 10px "JetBrains Mono", monospace'; g.fillText(fmt(conv(c.spot), 2).replace(/,/g, ''), (M.l - 4) / 2 + 1, Ys);
+    // colour legend (right)
+    const lx = M.l + pw + 18, lh = ph * 0.6, ly = M.t + ph * 0.2; for (let i = 0; i <= 60; i++) { const v = mx * (1 - 2 * i / 60); g.fillStyle = colr(v); g.fillRect(lx, ly + lh * i / 60, 12, lh / 60 + 1); }
+    g.font = '9.5px "JetBrains Mono", monospace'; g.textAlign = 'left'; g.fillStyle = css('--axis');
+    const unit = mode === 'gamma' ? 'Bn/1%' : mode === 'delta' ? 'Bn' : 'Bn/hr', sc = 1e9;
+    g.fillText('+' + fmt(mx / sc, mode === 'charm' ? 3 : 2), lx - 4, ly - 10); g.fillText('−' + fmt(mx / sc, mode === 'charm' ? 3 : 2), lx - 4, ly + lh + 10); g.fillText(unit, lx - 4, ly + lh + 22);
+    g.save(); g.translate(lx + 26, ly + lh / 2); g.rotate(Math.PI / 2); g.textAlign = 'center'; g.fillText(mode === 'gamma' ? 'red = +γ (slows)   blue = −γ (accelerates)' : mode === 'delta' ? 'blue = dealers buy   red = dealers sell' : 'blue = buy drift   red = sell drift', 0, 0); g.restore();
+    // title
+    g.font = '600 13px Inter, sans-serif'; g.fillStyle = css('--text'); g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    g.fillText(`TRACE · ${tickerLabel(sym)} · ${{ gamma: 'Gamma', delta: 'Delta pressure', charm: 'Charm pressure' }[mode]} · ${scope === 'zero' ? '0DTE' : '≤ 30 days'} · ${etDate(c.asOf)} ${etTime(c.asOf)} ET${cols.length === 1 ? ' · single snapshot (load intraday files or use the live link for a full day)' : ''}`, M.l, 19);
+    // current-column stats (sidebar)
+    if (!hoverOnly) {
+      const v = vals[vals.length - 1], S = c.spot; let up = null, dn = null, flip = null;
+      for (let i = 0; i < N; i++) { if (prices[i] > S && (!up || v[i] > up.v)) up = { p: prices[i], v: v[i] }; if (prices[i] < S && (!dn || v[i] > dn.v)) dn = { p: prices[i], v: v[i] }; if (i && (v[i] >= 0) !== (v[i - 1] >= 0) && (flip == null || Math.abs(prices[i] - S) < Math.abs(flip - S))) flip = prices[i]; }
+      const box = $('trStats');
+      if (box) box.innerHTML = mode === 'gamma' ? `<div class="sec">current column</div>${kv('strongest +γ above', up && up.v > 0 ? F(up.p) : '–', 'c-rd')}${kv('strongest +γ below', dn && dn.v > 0 ? F(dn.p) : '–', 'c-rd')}${kv('γ flip (red↔blue)', flip ? F(flip) : '–', 'c-or')}${kv('at spot', (v[Math.round((S - prices[0]) / (prices[1] - prices[0]))] >= 0 ? '<span class="c-rd">positive γ (slow)</span>' : '<span class="c-cy">negative γ (fast)</span>'))}` : `<div class="sec">current column</div>${kv('flip level', flip ? F(flip) : '–', 'c-or')}`;
+    }
+    // hover
+    const tip = $('trTip'), hv = st.trHover;
+    if (hv && hv.x > M.l && hv.x < M.l + pw && hv.y > M.t && hv.y < M.t + ph) {
+      g.strokeStyle = css('--muted'); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(M.l, hv.y + .5); g.lineTo(M.l + pw, hv.y + .5); g.moveTo(hv.x + .5, M.t); g.lineTo(hv.x + .5, M.t + ph); g.stroke(); g.setLineDash([]);
+      const pd = Yinv(hv.y), pu = unconv(pd), i = Math.max(0, Math.min(N - 1, Math.round((pu - prices[0]) / (prices[1] - prices[0]))));
+      const tH = t0 + (hv.x - M.l) / pw * (t1 - t0); let k = 0; for (let j = 0; j < cols.length; j++) if (cols[j].asOf <= tH) k = j;
+      const val = vals[k][i], strength = mxTrue ? Math.abs(val) / mxTrue : 0, sw = strength > 0.6 ? 'strong' : strength > 0.25 ? 'moderate' : 'weak';
+      const above = pu > cols[k].spot;
+      const msg = mode === 'gamma' ? (val >= 0 ? `<b style="color:#ff5a4f">Positive gamma (${sw})</b>. Dealers lean against moves here, so expect price to slow, stall or bounce ${above ? 'as it rises into this level (resistance)' : 'as it falls into this level (support)'}.` : `<b style="color:#3d8bff">Negative gamma (${sw})</b>. Dealers chase price here, so moves through this zone tend to be fast. A break into it can accelerate.`)
+        : mode === 'delta' ? (val >= 0 ? `<b style="color:#3d8bff">Dealers would buy (${sw})</b>. If price got here, hedging adds buying${above ? ', which can extend a rally' : ', which can cushion a drop'}.` : `<b style="color:#ff5a4f">Dealers would sell (${sw})</b>. If price got here, hedging adds selling${above ? ', which can cap a rally' : ', which can extend a drop'}.`)
+        : (val >= 0 ? `<b style="color:#3d8bff">Buy drift (${sw})</b>. As time passes at this price, dealers buy to stay hedged: a supportive drift, stronger near the close.` : `<b style="color:#ff5a4f">Sell drift (${sw})</b>. As time passes at this price, dealers sell to stay hedged: a downward drift, stronger near the close.`);
+      tip.innerHTML = `<div class="tt">${fmt(pd, 2)} · ${etTime(cols[k].asOf)} ET</div><span class="mono">${fmt(val / 1e9, 3)} ${unit}</span><br>${msg}`;
+      tip.style.display = 'block'; tip.style.left = Math.min(hv.x + 16, W - tip.offsetWidth - 8) + 'px'; tip.style.top = (hv.y - tip.offsetHeight - 10 < 4 ? hv.y + 16 : hv.y - tip.offsetHeight - 10) + 'px';
+    } else tip.style.display = 'none';
+  }
+
   // ---------- 3D surfaces (Plotly, loaded on demand) ----------
   let plotlyP = null;
   const loadPlotly = () => plotlyP || (plotlyP = new Promise((res, rej) => { if (window.Plotly) return res(); const s = document.createElement('script'); s.src = 'https://cdn.plot.ly/plotly-2.35.2.min.js'; s.onload = res; s.onerror = () => { plotlyP = null; rej(new Error('Could not load Plotly')); }; document.head.appendChild(s); }));
@@ -1626,6 +1754,7 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     <li><b>Clock:</b> a level hit at 10–11 am is stronger than at 3 pm. 0DTE decay makes late targets harder to reach. Many traders follow SPX levels even for NQ.</li></ul>
     <p class="mu">Hover any line or bar for an explanation. Click any price for a full read at the bottom. Esc closes it.</p>
     <h4>profit zones</h4><p>For today's (or tomorrow's) expiry the terminal finds the real <b>25Δ call</b> and <b>25Δ put</b> strikes from Cboe's IVs. A buyer of that option gains fastest as price runs to the strike, where delta reaches ~50 and gamma peaks. That is where profit is booked and the dealer unwinds, so these strikes act as targets and turning points (the "25 / 50 delta" slide in the video). They also appear as cyan and violet lines on the levels charts and in the TradingView script.</p>
+    <h4>trace</h4><p>A TRACE-style heatmap (like SpotGamma's). For every snapshot of the session it computes dealer exposure at each test price (naive dealer: long calls, short puts) and shades the cell. <b>Gamma</b>: red = positive gamma (price slows, stalls or bounces), blue = negative gamma (price moves fast). <b>Delta pressure</b>: the futures dealers would buy (blue) or sell (red) if price moved there. <b>Charm pressure</b>: hedging drift per hour from time decay. Hover any cell for its meaning. With one file you get one column; intraday files or the live link fill the day.</p>
     <h4>3d</h4><p>Strike × expiry surfaces: GEX by open interest, GEX by today's volume, traded volume, and implied volatility. Drag to rotate.</p>
     <h4>state</h4><p>GexBot classifies every option trade as taker-long or taker-short from tick data. Cboe's free data has no trade tape, so this uses a <b>proxy</b>: each snapshot's new volume is split by where that contract's last trade sits between bid and ask (at the ask = bought, at the bid = sold). It is cumulative through the session, so it gets better with more live snapshots.</p>
     <ul><li><b>options profile</b> (no toggle): taker long (right) and short (left) contracts — calls orange, puts purple.</li>

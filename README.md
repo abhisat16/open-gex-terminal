@@ -9,6 +9,7 @@ A free, GexBot-style options positioning terminal (Classic + State views), compu
 - **state**: options profile (taker long/short calls and puts), DEX, convexity (gamma), −vanna ex and charm ex ladders, and the GEX profile (net call vs put imbalance), with 0DTE IV skew dots and the ±1σ expected move.
 - **levels**: call wall, put wall, zero gamma and net GEX for every loaded ticker, in futures terms, drawn on a TradingView Lightweight Charts candle chart (Cboe 1-minute candles). **Copy TradingView script** exports the same lines as a Pine Script indicator for your own ES1! / NQ1! / GC1! chart.
 - **profit zones**: the real 25Δ call / put strikes of the 0DTE and 1DTE expiries with delta-progression and gamma-profile curves (where option buyers book profit as gamma peaks at ~50Δ).
+- **trace**: a TRACE-style heatmap (time × price) of dealer gamma, delta pressure and charm pressure at hypothetical prices for every snapshot of the session, with Cboe candles on top and hover explanations.
 - **3d**: strike × expiry surfaces of GEX by open interest, GEX by volume, traded volume and implied volatility (Plotly).
 - **Playbook**: hover any line or bar for an explanation; click any price for a full read (nearest levels, strike flow, buy/sell/no-trade zone with a checklist, regime, max change, time to close).
 
