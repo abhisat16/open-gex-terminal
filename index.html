@@ -136,6 +136,12 @@ select.chip{appearance:none;-webkit-appearance:none;text-align:center;cursor:poi
 #levels h2{margin:0 0 4px;font-size:17px;font-weight:600}
 #levels .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
 .lvgrid{display:grid;grid-template-columns:1fr;gap:18px}
+.vstat{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin:-4px 0 12px;font-family:var(--mono)}
+.vstat i{width:8px;height:8px;border-radius:50%;background:#666;display:inline-block}
+.vstat.on i{background:#39d353;box-shadow:0 0 6px #39d353;animation:vpulse 1.6s infinite}.vstat.wait i{background:#f0a030}
+@keyframes vpulse{50%{opacity:.35}}
+.vstat button{font:inherit;font-size:10px;padding:1px 8px;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:5px;cursor:pointer}
+.lvc h4 .vpx{color:#26d0ff;font-weight:600;transition:color .2s}.lvc h4 .vpx.up{color:#39d353}.lvc h4 .vpx.dn{color:#ff5a5f}
 .tvc{height:calc(100vh - 230px);min-height:420px;margin:0 0 8px;border:1px solid var(--line);border-radius:7px;overflow:hidden}
 .tvtabs{display:flex;gap:4px;margin-top:4px}
 .tvtabs button{background:none;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;padding:4px 10px;font-size:11px;color:var(--muted)}
@@ -402,7 +408,11 @@ const GEX = (() => {
     if (cl) { const [, day, body] = cl.match(/^#CANDLES (\d{4}-\d{2}-\d{2}) (.*)$/) || []; if (day && body) { const [y, mo, d] = day.split('-').map(Number); for (const it of body.split(';')) { const p = it.split(','); if (p.length < 5) continue; const hh = +p[0].slice(0, 2), mm = +p[0].slice(2, 4); candles.push({ t: etToMs(y, mo - 1, d, hh, mm) - 60000, o: num(p[1]), h: num(p[2]), l: num(p[3]), c: num(p[4]) }); } } }
     const fp = num(meta.futures_price);
     const ohlc = num(meta.high) ? { open: num(meta.open), high: num(meta.high), low: num(meta.low) } : null;
-    return { ohlc, candles, symbol: meta.symbol || (rows[0] && rows[0].root.replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1')) || '', spot: num(meta.spot), prevClose: num(meta.prev_close) || null, asOf, rows,
+    // optional Vest real-time perp 1-minute candles (already in futures terms): "#VCANDLES GC-PERP 1795518480000,o,h,l,c;..." (t = bar start, ms)
+    let vcandles = null;
+    const vl = lines.find(l => l.startsWith('#VCANDLES '));
+    if (vl) { const mm = vl.match(/^#VCANDLES (\S+) (.*)$/); if (mm) { vcandles = { sym: mm[1], bars: [] }; for (const it of mm[2].split(';')) { const p = it.split(','); if (p.length >= 5 && +p[0] > 0) vcandles.bars.push({ t: +p[0], o: num(p[1]), h: num(p[2]), l: num(p[3]), c: num(p[4]) }); } } }
+    return { ohlc, candles, vcandles, symbol: meta.symbol || (rows[0] && rows[0].root.replace(/^(SPX|NDX|RUT|VIX|XSP)[WP]$/, '$1')) || '', spot: num(meta.spot), prevClose: num(meta.prev_close) || null, asOf, rows,
       futures: fp > 0 ? { symbol: meta.futures || '', price: fp, note: meta.futures_note || '' } : null };
   }
   function parseAny(text) {
@@ -1424,6 +1434,50 @@ GM.traceColumn = function (snap, prices, mode, scope) {
   $('snapBtn').addEventListener('click', () => { const a = document.createElement('a'); const c = cur(); a.download = `gexterm_${st.view}_${st.sym || 'chart'}_${c ? GM.prep(c).day : ''}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
 
   // ---------- levels page: TradingView chart (Lightweight Charts) with the levels marked + Pine Script export ----------
+  // ---------- Vest real-time feed (perps that track the CME futures; public websocket, no key) ----------
+  const VEST_SYM = { SPX: 'SPX-USD-PERP', XSP: 'SPX-USD-PERP', SPY: 'SPX-USD-PERP', NDX: 'NDX-USD-PERP', QQQ: 'NDX-USD-PERP', GLD: 'GC-PERP', RUT: 'RTY-USD-PERP', IWM: 'RTY-USD-PERP' };
+  const VEST_URL = 'wss://ws-prod.hz.vestmarkets.com/ws?xwebsocketserver=restserver0&version=1.0';
+  const VEST = { ws: null, on: true, status: 'off', bars: {}, last: {}, subs: new Set(), retry: 0, hooks: new Map(), ping: 0, saveT: 0, loaded: new Set() };
+  try { VEST.on = localStorage.getItem('gexterm-vest-off') !== '1'; } catch (e) {}
+  function vestLoad(v) {
+    if (VEST.loaded.has(v)) return; VEST.loaded.add(v); const m = VEST.bars[v] = VEST.bars[v] || new Map();
+    try { const a = JSON.parse(localStorage.getItem('gexterm-vest-' + v) || '[]'); for (const k of a) if (!m.has(k.t)) m.set(k.t, k); } catch (e) {}
+  }
+  function vestSave() {
+    const cut = Date.now() - 36 * 3600e3;
+    for (const [v, m] of Object.entries(VEST.bars)) { try { localStorage.setItem('gexterm-vest-' + v, JSON.stringify([...m.values()].filter(k => k.t >= cut).sort((a, b) => a.t - b.t))); } catch (e) {} }
+  }
+  function vestTick(v, d) {
+    const px = parseFloat(d.indexPrice) || parseFloat(d.markPrice); if (!(px > 0)) return;
+    const now = Date.now(), t = Math.floor(now / 60000) * 60000; vestLoad(v);
+    const m = VEST.bars[v]; let b = m.get(t);
+    if (!b) { b = { t, o: px, h: px, l: px, c: px, live: 1 }; m.set(t, b); } else { b.h = Math.max(b.h, px); b.l = Math.min(b.l, px); b.c = px; b.live = 1; }
+    VEST.last[v] = { px, mark: parseFloat(d.markPrice) || px, chg: parseFloat(d.priceChange), ts: now };
+    for (const fn of VEST.hooks.values()) { try { fn(v, b); } catch (e) {} }
+    if (now - VEST.saveT > 20000) { VEST.saveT = now; vestSave(); }
+  }
+  function vestStatusEl() { const e = $('vestStat'); if (!e) return; const n = [...VEST.subs].length; e.className = 'vstat ' + (VEST.status === 'live' ? 'on' : VEST.status === 'connecting' ? 'wait' : 'off'); e.innerHTML = `<i></i>Vest real-time: ${VEST.on ? VEST.status : 'paused'}${n ? ` · ${[...VEST.subs].join(', ')}` : ''} <button id="vestTog">${VEST.on ? 'pause' : 'connect'}</button>`; const tg = $('vestTog'); if (tg) tg.addEventListener('click', () => { VEST.on = !VEST.on; try { localStorage.setItem('gexterm-vest-off', VEST.on ? '0' : '1'); } catch (e) {} if (VEST.on) vestConnect(); else { try { VEST.ws && VEST.ws.close(); } catch (e) {} VEST.status = 'off'; } vestStatusEl(); }); }
+  function vestConnect() {
+    if (!VEST.on || !VEST.subs.size) return;
+    if (VEST.ws && VEST.ws.readyState <= 1) { if (VEST.ws.readyState === 1) VEST.ws.send(JSON.stringify({ method: 'SUBSCRIBE', params: [...VEST.subs].map(v => v + '@ticker'), id: Date.now() % 1e6 })); return; }
+    VEST.status = 'connecting'; vestStatusEl();
+    let ws; try { ws = new WebSocket(VEST_URL); } catch (e) { VEST.status = 'error'; vestStatusEl(); return; }
+    VEST.ws = ws;
+    ws.onopen = () => { VEST.retry = 0; VEST.status = 'live'; vestStatusEl(); ws.send(JSON.stringify({ method: 'SUBSCRIBE', params: [...VEST.subs].map(v => v + '@ticker'), id: 1 })); clearInterval(VEST.ping); VEST.ping = setInterval(() => { try { ws.send('{"method":"PING","params":[],"id":0}'); } catch (e) {} }, 25000); };
+    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m && m.channel && m.channel.endsWith('@ticker') && m.data) vestTick(m.channel.split('@')[0], m.data); };
+    ws.onclose = () => { clearInterval(VEST.ping); if (VEST.ws === ws) VEST.ws = null; vestSave(); if (VEST.on) { VEST.status = 'reconnecting'; vestStatusEl(); setTimeout(vestConnect, Math.min(30000, 1000 * 2 ** VEST.retry++)); } else { VEST.status = 'off'; vestStatusEl(); } };
+    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  }
+  function vestWant(v) { if (!v) return; vestLoad(v); if (!VEST.subs.has(v)) { VEST.subs.add(v); vestConnect(); } else if (!VEST.ws) vestConnect(); }
+  // Vest 1-minute bars for a perp: bars saved in loaded files (#VCANDLES) + bars built live in this browser
+  function vestBarsFor(sym, v) {
+    const m = new Map();
+    for (const sn of st.store[sym] || []) if (sn.vcandles && sn.vcandles.sym === v) for (const k of sn.vcandles.bars) m.set(k.t, k);
+    vestLoad(v); for (const [t, k] of VEST.bars[v]) { const o = m.get(t); m.set(t, o && !k.live ? o : k); }
+    const cut = Date.now() - 36 * 3600e3; return [...m.values()].filter(k => k.t >= cut).sort((a, b) => a.t - b.t);
+  }
+  window.addEventListener('beforeunload', vestSave);
+
   const TV_SYM = { ES: 'CME_MINI:ES1!', NQ: 'CME_MINI:NQ1!', GC: 'COMEX:GC1!', RTY: 'CME_MINI:RTY1!', SPX: 'SP:SPX', NDX: 'NASDAQ:NDX', GLD: 'AMEX:GLD', SPY: 'AMEX:SPY', QQQ: 'NASDAQ:QQQ' };
   let lvCharts = [];
   function levelSet(s, c) {
@@ -1465,7 +1519,8 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
     const syms = Object.keys(st.store), el = $('levels');
     if (!syms.length) { el.innerHTML = `<h2>Levels</h2><div class="sub">No data yet. Load today's SPX, NDX and GLD files together.</div>`; return; }
     const saveSym = st.sym, saveIdx = st.idx, jobs = [];
-    let h = `<h2>Levels</h2><div class="sub">Naive GEX (calls +, puts −) in futures terms, drawn on a TradingView chart of Cboe's 1-minute candles (converted with the file's futures price). Use <b>Copy TradingView script</b> to put the same lines on your own ES1! / NQ1! / GC1! chart. Cboe data is ~15 min delayed.</div><div class="lvsyms">${syms.map((s, n) => `<button data-jump="${n}">${tickerLabel(s)}</button>`).join('')}</div><div class="lvgrid">`;
+    VEST.hooks.clear();
+    let h = `<h2>Levels</h2><div class="sub">Naive GEX (calls +, puts −) in futures terms. <b>Bright candles = Vest real-time</b> (SPX-USD-PERP tracks ES, GC-PERP tracks GC, NDX-USD-PERP tracks NQ), built minute by minute while this page is open and kept in this browser; dim candles = Cboe's ~15-min-delayed 1-minute bars from the file. The levels themselves come from Cboe option data, so they're as of the file time. Use <b>Copy TradingView script</b> to put the same lines on your own chart.</div><div class="vstat" id="vestStat"></div><div class="lvsyms">${syms.map((s, n) => `<button data-jump="${n}">${tickerLabel(s)}</button>`).join('')}</div><div class="lvgrid">`;
     syms.forEach((s, n) => {
       st.sym = s; const a = st.store[s]; st.idx = s === saveSym ? saveIdx : a.length - 1; const c = a[st.idx];
       const f = futInfo(s), lab = st.useFut && f ? f.fut : s;
@@ -1473,16 +1528,18 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
       const cell = v => v == null ? '–' : `${fmt(conv(v), 2)}<small>${s} ${fmt(v, s === 'GLD' ? 2 : 0)}</small>`;
       const full = rows[0][1], z = full.oi.zero, reg = z == null ? '' : c.spot >= z ? `<span class="c-gr">above zero gamma → positive gamma (mean-reverting)</span>` : `<span class="c-rd">below zero gamma → negative gamma (trending)</span>`;
       const lv = levelSet(s, c), candles = candlesFor(s, null, null), cday = candles.length ? GM.etDay(candles[candles.length - 1].t) : null;
+      const vsym = VEST_SYM[s] && f ? VEST_SYM[s] : null; if (vsym) vestWant(vsym);
+      const vbars = vsym ? vestBarsFor(s, vsym) : [], zF = full.oi.zero == null ? null : conv(full.oi.zero);
       const tv = TV_SYM[lab] || TV_SYM[s];
-      h += `<div class="lvc" id="lvc${n}"><h4>${tickerLabel(s)} <span>${lab} ${fmt(conv(c.spot), 2)}</span></h4><div class="meta">${etDate(c.asOf)} ${etTime(c.asOf)} ET · ${f ? (f.useRatio ? `×${f.ratio.toFixed(4)}` : `basis ${f.basis >= 0 ? '+' : ''}${f.basis.toFixed(2)}`) + ` (${f.src})` : 'no futures price in file'}${cday ? ` · candles ${cday.slice(5).replace('-', '/')}${cday !== GM.prep(c).day ? ' (previous session)' : ''}` : ' · no candles in file (spot points only)'}</div>
+      h += `<div class="lvc" id="lvc${n}"><h4>${tickerLabel(s)} <span>${vsym ? `<b class="vpx" id="vpx${n}" title="Real-time ${vsym} price from Vest (tracks CME ${lab}). Cboe options data and the levels stay ~15 min delayed.">Vest ${VEST.last[vsym] ? fmt(VEST.last[vsym].px, 2) : '…'}</b> · ` : ''}Cboe ${lab} ${fmt(conv(c.spot), 2)}</span></h4><div class="meta">${etDate(c.asOf)} ${etTime(c.asOf)} ET · ${f ? (f.useRatio ? `×${f.ratio.toFixed(4)}` : `basis ${f.basis >= 0 ? '+' : ''}${f.basis.toFixed(2)}`) + ` (${f.src})` : 'no futures price in file'}${cday ? ` · candles ${cday.slice(5).replace('-', '/')}${cday !== GM.prep(c).day ? ' (previous session)' : ''}` : ' · no candles in file (spot points only)'}${vsym ? ` · <span style="color:#26d0ff">Vest ${vsym} real-time${vbars.length ? `, ${vbars.length} bars since ${etTime(vbars[0].t).replace(/:\d\d (?=[AP]M)/, ' ')}` : ''}</span>` : ''}</div>
         <div class="tvtabs"><button class="on" data-tvt="lv" data-n="${n}">Levels chart</button>${tv ? `<button data-tvt="live" data-n="${n}" data-sym="${tv}">Live TradingView</button>` : ''}</div>
         <div class="tvc" id="tvc${n}"></div>${candles.length ? '' : `<div class="meta c-or" style="margin:-4px 0 8px">No candles in this file yet, so the chart shows the levels around spot. Newer files (and the live link) include Cboe candles. The Live TradingView tab shows the real chart now.</div>`}
         <div class="tvc tvlive" id="tvl${n}" style="display:none"></div>
         <div class="tvbar"><button class="open" data-pine="${s}">Copy TradingView script</button>${tv ? `<a class="open" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tv)}" target="_blank" rel="noopener">Open ${tv.split(':')[1]} on TradingView ↗</a>` : ''}<button class="open" data-open="${s}">open in classic →</button></div>
         <table><tr><th></th><th>call wall</th><th>put wall</th><th>zero γ</th><th>net gex</th></tr>
         ${rows.map(([nm, r]) => `<tr><td>${nm}${nm !== '90d' ? `<small>${mmdd(r.exps[nm === 'latest' ? 0 : 1])}</small>` : '<small>OI</small>'}</td><td class="c-gr">${cell(r.oi.pos)}</td><td class="c-rd">${cell(r.oi.neg)}</td><td class="c-or">${cell(r.oi.zero)}</td><td class="${r.netOI < 0 ? 'c-rd' : 'c-gr'}">${fmt(r.netOI / 1e9, 2)}Bn</td></tr>`).join('')}
-        </table><div class="reg">${reg}</div></div>`;
-      jobs.push({ n, s, c, lv, candles, f, spots: a.map(x => ({ t: x.asOf, v: x.spot })) });
+        </table><div class="reg" id="reg${n}">${reg}</div></div>`;
+      jobs.push({ n, s, c, lv, candles, f, vsym, vbars, zF, lab, spots: a.map(x => ({ t: x.asOf, v: x.spot })) });
     });
     el.innerHTML = h + '</div>';
     // charts (need the sym context for conv())
@@ -1494,9 +1551,23 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
       const ch = LightweightCharts.createChart(box, { autoSize: true, layout: { background: { type: 'solid', color: dark ? '#0b0b0d' : '#ffffff' }, textColor: dark ? '#c9c9d1' : '#2b2d33', fontFamily: 'JetBrains Mono, monospace', fontSize: 10 }, grid: { vertLines: { color: dark ? '#16161a' : '#f0f1f4' }, horzLines: { color: dark ? '#16161a' : '#f0f1f4' } }, rightPriceScale: { borderColor: dark ? '#26262c' : '#dfe1e6' }, timeScale: { borderColor: dark ? '#26262c' : '#dfe1e6', timeVisible: true, secondsVisible: false, tickMarkFormatter: t => etFmt(t, false) }, localization: { timeFormatter: t => etFmt(t, true) + ' ET' }, crosshair: { mode: 0 } });
       lvCharts.push(ch);
       let series;
-      if (jb.candles.length) {
+      // Vest bars are already in futures terms; when the futures toggle is off, map them back to index terms with the file's conversion
+      const vf = jb.f, vmap = x => (st.useFut || !vf) ? x : (vf.useRatio ? x / vf.ratio : x - vf.basis);
+      if (jb.candles.length || jb.vbars.length) {
         series = ch.addCandlestickSeries({ upColor: '#58c95a', downColor: '#a05ad8', borderVisible: false, wickUpColor: '#58c95a', wickDownColor: '#a05ad8', priceFormat: { type: 'price', precision: 2, minMove: 0.01 } });
-        series.setData(jb.candles.map(k => ({ time: Math.floor(k.t / 1000), open: conv(k.o), high: conv(k.h), low: conv(k.l), close: conv(k.c) })));
+        const v0 = jb.vbars.length ? jb.vbars[0].t : Infinity, DIM_UP = dark ? '#2f5f37' : '#a9d9ae', DIM_DN = dark ? '#4f3566' : '#d3b6e8';
+        const cb = jb.candles.filter(k => k.t < v0).map(k => { const up = k.c >= k.o; return { time: Math.floor(k.t / 1000), open: conv(k.o), high: conv(k.h), low: conv(k.l), close: conv(k.c), color: up ? DIM_UP : DIM_DN, wickColor: up ? DIM_UP : DIM_DN }; });
+        const vb = jb.vbars.map(k => ({ time: Math.floor(k.t / 1000), open: vmap(k.o), high: vmap(k.h), low: vmap(k.l), close: vmap(k.c) }));
+        series.setData(cb.concat(vb));
+        if (jb.vsym) {
+          const zF = st.useFut ? jb.zF : (jb.zF == null ? null : jb.zF), n = jb.n, lab = jb.lab;
+          VEST.hooks.set(n, (v, b) => {
+            if (v !== jb.vsym) return;
+            try { series.update({ time: Math.floor(b.t / 1000), open: vmap(b.o), high: vmap(b.h), low: vmap(b.l), close: vmap(b.c) }); } catch (e) {}
+            const L = VEST.last[v], e1 = $('vpx' + n); if (e1) { e1.textContent = 'Vest ' + fmt(L.px, 2); e1.classList.toggle('dn', L.px < (e1._p || L.px)); e1.classList.toggle('up', L.px > (e1._p || L.px)); e1._p = L.px; }
+            const r = $('reg' + n); if (r && zF != null && st.useFut) { const p = L.px; r.innerHTML = (p >= zF ? `<span class="c-gr">Vest ${lab} ${fmt(p, 2)} is above zero gamma ${fmt(zF, 2)} → positive gamma (mean-reverting)</span>` : `<span class="c-rd">Vest ${lab} ${fmt(p, 2)} is below zero gamma ${fmt(zF, 2)} → negative gamma (trending)</span>`) + ` <small class="mu">live</small>`; }
+          });
+        }
       } else {
         series = ch.addLineSeries({ color: '#58c95a', lineWidth: 2, pointMarkersVisible: true, lastValueVisible: true });
         const day = GM.prep(jb.c).day, pts = new Map();
@@ -1510,8 +1581,9 @@ ${lv.map(l => `lvl(${conv(l.v).toFixed(2)}, "${l.title}", ${col(l.color)}, ${sty
       const ps = jb.lv.map(l => conv(l.v)).filter(p => Math.abs(p / spotF - 1) <= band).concat([spotF]);
       series.applyOptions({ autoscaleInfoProvider: orig => { const r = orig(); const lo = Math.min(...ps, r ? r.priceRange.minValue : Infinity), hi = Math.max(...ps, r ? r.priceRange.maxValue : -Infinity), pad = (hi - lo) * 0.06 || spotF * 0.002; return { priceRange: { minValue: lo - pad, maxValue: hi + pad } }; } });
       ch.timeScale().fitContent();
+      if (jb.vbars.length > 420) { const nb = jb.vbars.length + jb.candles.filter(k => k.t < jb.vbars[0].t).length; ch.timeScale().setVisibleLogicalRange({ from: nb - 400, to: nb + 15 }); }
     }
-    st.sym = saveSym; st.idx = saveIdx;
+    st.sym = saveSym; st.idx = saveIdx; vestStatusEl();
     el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { st.sym = b.dataset.open; st.idx = st.store[st.sym].length - 1; selectView('classic'); }));
     el.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => $('lvc' + b.dataset.jump).scrollIntoView({ behavior: 'smooth', block: 'start' })));
     el.querySelectorAll('[data-tvt]').forEach(b => b.addEventListener('click', () => {
